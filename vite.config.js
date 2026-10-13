@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite';
 
-export default defineConfig({
-  base: '/Kindle-Organizer/',
-});
+export default defineConfig(({ command }) => ({
+  base: command === 'build' ? '/Kindle-Organizer/' : '/',
+}));
