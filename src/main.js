@@ -100,7 +100,7 @@ function loadRaw(raw) {
 }
 
 async function loadSampleData() {
-  const res = await fetch('/sample-clippings.txt');
+  const res = await fetch(`${import.meta.env.BASE_URL}sample-clippings.txt`);
   const raw = await res.text();
   loadRaw(raw);
 }

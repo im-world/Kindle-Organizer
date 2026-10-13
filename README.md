@@ -1,8 +1,10 @@
 # Kindle Highlight Organizer
 
-A clean, minimalist desktop app to browse and search your Kindle highlights.
+A clean, minimalist desktop web app to browse and search your Kindle highlights.
 
-![Screenshot](docs/screenshot.png)
+🔗 **[Live Demo](https://im-world.github.io/Kindle-Organizer/)**
+
+![Kindle Highlight Organizer Screenshot](docs/screenshot.png)
 
 ## Features
 
