@@ -22,11 +22,47 @@ let state = {
   selectedYear: 'all',           // timeline year filter
   selectedPageRange: 'all',      // book view 50-page range filter
   selectedBookFilter: 'all',     // all-books view jump filter
-  collapsedSections: new Set(),  // IDs of sections currently collapsed by user
+  globalCollapseState: 'collapsed', // 'collapsed' (default) | 'expanded'
+  expandedSections: new Set(),   // explicitly expanded sections when global is collapsed
+  collapsedSections: new Set(),  // explicitly collapsed sections when global is expanded
   theme: localStorage.getItem('kho-theme') || 'light',
 };
 
 const app = document.getElementById('app');
+
+/* ============================================================
+   Collapse Management (Carried across all tabs)
+   ============================================================ */
+function isSectionCollapsed(sectionId) {
+  if (state.globalCollapseState === 'collapsed') {
+    return !state.expandedSections.has(sectionId);
+  } else {
+    return state.collapsedSections.has(sectionId);
+  }
+}
+
+function toggleSectionCollapse(sectionId) {
+  if (state.globalCollapseState === 'collapsed') {
+    if (state.expandedSections.has(sectionId)) {
+      state.expandedSections.delete(sectionId);
+    } else {
+      state.expandedSections.add(sectionId);
+    }
+  } else {
+    if (state.collapsedSections.has(sectionId)) {
+      state.collapsedSections.delete(sectionId);
+    } else {
+      state.collapsedSections.add(sectionId);
+    }
+  }
+}
+
+function toggleGlobalCollapse() {
+  state.globalCollapseState = state.globalCollapseState === 'collapsed' ? 'expanded' : 'collapsed';
+  state.expandedSections.clear();
+  state.collapsedSections.clear();
+  renderContent();
+}
 
 /* ============================================================
    Theme Management
@@ -40,7 +76,6 @@ applyTheme();
 function toggleTheme() {
   state.theme = state.theme === 'light' ? 'dark' : 'light';
   applyTheme();
-  // Update all theme toggle buttons currently in the DOM
   document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
     btn.innerHTML = state.theme === 'light' ? icons.moon : icons.sun;
     btn.setAttribute('data-tooltip', state.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
@@ -71,7 +106,7 @@ function showToast(message) {
 }
 
 /* ============================================================
-   Minimalist Landing Page (Clean, Warm, No Box Clutter)
+   Minimalist Landing Page (Centered, Balanced, No Box Clutter)
    ============================================================ */
 function renderLanding() {
   app.innerHTML = `
@@ -90,23 +125,26 @@ function renderLanding() {
           Drop your <strong>My Clippings.txt</strong> file here,<br/>or click to browse.
         </p>
 
+        <!-- Symmetrically Centered Action Row -->
         <div class="upload-action-row">
-          <button class="upload-btn" id="upload-btn">
-            ${icons.upload} Upload Clippings.txt
-          </button>
-
-          <!-- Small Help Icon with Newbie Steps Popover -->
-          <div class="help-wrapper">
-            <button class="help-icon-btn" id="help-btn" type="button" aria-label="Help with exporting clippings">
-              ${icons.helpCircle}
+          <div class="upload-button-wrapper">
+            <button class="upload-btn" id="upload-btn">
+              ${icons.upload} Upload Clippings.txt
             </button>
-            <div class="help-popover" role="tooltip">
-              <div class="help-popover-title">How to get your clippings:</div>
-              <ol class="help-popover-steps">
-                <li>Connect your Kindle to computer via USB</li>
-                <li>Open the <code>documents</code> folder on Kindle</li>
-                <li>Select <code>My Clippings.txt</code></li>
-              </ol>
+
+            <!-- Help Icon absolutely positioned to the right (does not offset the button) -->
+            <div class="help-wrapper">
+              <button class="help-icon-btn" id="help-btn" type="button" aria-label="Help with exporting clippings" data-tooltip="How to get clippings">
+                ${icons.helpCircle}
+              </button>
+              <div class="help-popover" role="tooltip">
+                <div class="help-popover-title">How to get your clippings:</div>
+                <ol class="help-popover-steps">
+                  <li>Connect your Kindle to computer via USB</li>
+                  <li>Open the <code>documents</code> folder on Kindle</li>
+                  <li>Select <code>My Clippings.txt</code></li>
+                </ol>
+              </div>
             </div>
           </div>
         </div>
@@ -191,6 +229,8 @@ function loadRaw(raw) {
   state.selectedYear = 'all';
   state.selectedPageRange = 'all';
   state.selectedBookFilter = 'all';
+  state.globalCollapseState = 'collapsed'; // Default collapsed on load!
+  state.expandedSections.clear();
   state.collapsedSections.clear();
   renderMain();
 }
@@ -351,6 +391,8 @@ function renderSidebar() {
     state.books = new Map();
     state.selectedBook = null;
     state.searchQuery = '';
+    state.globalCollapseState = 'collapsed';
+    state.expandedSections.clear();
     state.collapsedSections.clear();
     renderLanding();
   });
@@ -431,7 +473,7 @@ function renderAllBooksView(stripEl, containerEl, list) {
   // Group highlights by book name
   const bookGroups = groupHighlightsByBookList(list);
 
-  // If there are multiple books, show the book jump strip & expand/collapse toggle
+  // If there are multiple books, show the book jump strip & global expand/collapse toggle
   if (bookGroups.length > 1) {
     stripEl.style.display = 'flex';
     stripEl.innerHTML = `
@@ -447,7 +489,9 @@ function renderAllBooksView(stripEl, containerEl, list) {
         `).join('')}
       </div>
       <div class="jump-actions">
-        <button class="action-link-btn" id="toggle-all-book-sections">Expand / Collapse All</button>
+        <button class="action-link-btn" id="toggle-global-collapse">
+          ${state.globalCollapseState === 'collapsed' ? 'Expand All' : 'Collapse All'}
+        </button>
       </div>
     `;
 
@@ -459,16 +503,8 @@ function renderAllBooksView(stripEl, containerEl, list) {
       });
     });
 
-    // Expand / Collapse All
-    document.getElementById('toggle-all-book-sections')?.addEventListener('click', () => {
-      const allCollapsed = bookGroups.every(bg => state.collapsedSections.has(`book-${bg.title}`));
-      if (allCollapsed) {
-        bookGroups.forEach(bg => state.collapsedSections.delete(`book-${bg.title}`));
-      } else {
-        bookGroups.forEach(bg => state.collapsedSections.add(`book-${bg.title}`));
-      }
-      renderAllBooksView(stripEl, containerEl, list);
-    });
+    // Global Expand / Collapse All (carries across all tabs)
+    document.getElementById('toggle-global-collapse')?.addEventListener('click', toggleGlobalCollapse);
 
     // Filter by selected book pill if active
     const visibleBookGroups = state.selectedBookFilter === 'all'
@@ -481,7 +517,7 @@ function renderAllBooksView(stripEl, containerEl, list) {
 
     visibleBookGroups.forEach(bg => {
       const sectionId = `book-${bg.title}`;
-      const isCollapsed = state.collapsedSections.has(sectionId);
+      const isCollapsed = isSectionCollapsed(sectionId);
 
       const groupDiv = document.createElement('div');
       groupDiv.className = 'collapsible-group';
@@ -496,16 +532,12 @@ function renderAllBooksView(stripEl, containerEl, list) {
             <span class="accordion-badge">${bg.highlights.length} highlight${bg.highlights.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
-        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}" id="body-${escapeAttr(sectionId)}"></div>
+        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}"></div>
       `;
 
       // Accordion click toggle
       groupDiv.querySelector('.accordion-header').addEventListener('click', () => {
-        if (state.collapsedSections.has(sectionId)) {
-          state.collapsedSections.delete(sectionId);
-        } else {
-          state.collapsedSections.add(sectionId);
-        }
+        toggleSectionCollapse(sectionId);
         renderAllBooksView(stripEl, containerEl, list);
       });
 
@@ -556,7 +588,9 @@ function renderSingleBookView(stripEl, containerEl, list) {
         `).join('')}
       </div>
       <div class="jump-actions">
-        <button class="action-link-btn" id="toggle-all-page-sections">Expand / Collapse All</button>
+        <button class="action-link-btn" id="toggle-global-collapse">
+          ${state.globalCollapseState === 'collapsed' ? 'Expand All' : 'Collapse All'}
+        </button>
       </div>
     `;
 
@@ -568,16 +602,8 @@ function renderSingleBookView(stripEl, containerEl, list) {
       });
     });
 
-    // Expand / Collapse All
-    document.getElementById('toggle-all-page-sections')?.addEventListener('click', () => {
-      const allCollapsed = pageSections.every(sec => state.collapsedSections.has(sec.id));
-      if (allCollapsed) {
-        pageSections.forEach(sec => state.collapsedSections.delete(sec.id));
-      } else {
-        pageSections.forEach(sec => state.collapsedSections.add(sec.id));
-      }
-      renderSingleBookView(stripEl, containerEl, list);
-    });
+    // Global Expand / Collapse All
+    document.getElementById('toggle-global-collapse')?.addEventListener('click', toggleGlobalCollapse);
 
     // Filter by selected range if active
     const visibleSections = state.selectedPageRange === 'all'
@@ -588,7 +614,8 @@ function renderSingleBookView(stripEl, containerEl, list) {
     const frag = document.createDocumentFragment();
 
     visibleSections.forEach(section => {
-      const isCollapsed = state.collapsedSections.has(section.id);
+      const sectionId = `page-${section.id}`;
+      const isCollapsed = isSectionCollapsed(sectionId);
       const groupDiv = document.createElement('div');
       groupDiv.className = 'collapsible-group';
 
@@ -600,16 +627,12 @@ function renderSingleBookView(stripEl, containerEl, list) {
             <span class="accordion-badge">${section.count} highlight${section.count !== 1 ? 's' : ''}</span>
           </div>
         </div>
-        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}" id="body-${section.id}"></div>
+        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}"></div>
       `;
 
       // Accordion click toggle
       groupDiv.querySelector('.accordion-header').addEventListener('click', () => {
-        if (state.collapsedSections.has(section.id)) {
-          state.collapsedSections.delete(section.id);
-        } else {
-          state.collapsedSections.add(section.id);
-        }
+        toggleSectionCollapse(sectionId);
         renderSingleBookView(stripEl, containerEl, list);
       });
 
@@ -658,7 +681,9 @@ function renderTimelineView(stripEl, containerEl, list) {
       `).join('')}
     </div>
     <div class="jump-actions">
-      <button class="action-link-btn" id="toggle-all-timeline">Expand / Collapse All</button>
+      <button class="action-link-btn" id="toggle-global-collapse">
+        ${state.globalCollapseState === 'collapsed' ? 'Expand All' : 'Collapse All'}
+      </button>
     </div>
   `;
 
@@ -670,22 +695,8 @@ function renderTimelineView(stripEl, containerEl, list) {
     });
   });
 
-  // Expand / Collapse All
-  document.getElementById('toggle-all-timeline')?.addEventListener('click', () => {
-    const allCollapsed = hierarchy.every(y => state.collapsedSections.has(`year-${y.year}`));
-    if (allCollapsed) {
-      hierarchy.forEach(y => {
-        state.collapsedSections.delete(`year-${y.year}`);
-        y.months.forEach(m => state.collapsedSections.delete(`month-${m.monthKey}`));
-      });
-    } else {
-      hierarchy.forEach(y => {
-        state.collapsedSections.add(`year-${y.year}`);
-        y.months.forEach(m => state.collapsedSections.add(`month-${m.monthKey}`));
-      });
-    }
-    renderTimelineView(stripEl, containerEl, list);
-  });
+  // Global Expand / Collapse All
+  document.getElementById('toggle-global-collapse')?.addEventListener('click', toggleGlobalCollapse);
 
   // Filter hierarchy if year is selected
   const visibleYears = state.selectedYear === 'all'
@@ -698,7 +709,7 @@ function renderTimelineView(stripEl, containerEl, list) {
 
   visibleYears.forEach(yearObj => {
     const yearId = `year-${yearObj.year}`;
-    const isYearCollapsed = state.collapsedSections.has(yearId);
+    const isYearCollapsed = isSectionCollapsed(yearId);
 
     const yearDiv = document.createElement('div');
     yearDiv.className = 'collapsible-group';
@@ -711,16 +722,12 @@ function renderTimelineView(stripEl, containerEl, list) {
           <span class="accordion-badge">${yearObj.count} highlight${yearObj.count !== 1 ? 's' : ''}</span>
         </div>
       </div>
-      <div class="accordion-body ${isYearCollapsed ? 'collapsed' : ''}" id="body-${yearId}"></div>
+      <div class="accordion-body ${isYearCollapsed ? 'collapsed' : ''}"></div>
     `;
 
     // Year collapse toggle
     yearDiv.querySelector('.accordion-header').addEventListener('click', () => {
-      if (state.collapsedSections.has(yearId)) {
-        state.collapsedSections.delete(yearId);
-      } else {
-        state.collapsedSections.add(yearId);
-      }
+      toggleSectionCollapse(yearId);
       renderTimelineView(stripEl, containerEl, list);
     });
 
@@ -729,7 +736,7 @@ function renderTimelineView(stripEl, containerEl, list) {
     // Render Months inside Year
     yearObj.months.forEach(monthObj => {
       const monthId = `month-${monthObj.monthKey}`;
-      const isMonthCollapsed = state.collapsedSections.has(monthId);
+      const isMonthCollapsed = isSectionCollapsed(monthId);
 
       const monthDiv = document.createElement('div');
       monthDiv.className = 'month-group';
@@ -740,17 +747,13 @@ function renderTimelineView(stripEl, containerEl, list) {
           <span>${monthObj.monthName}</span>
           <span class="accordion-badge">${monthObj.count}</span>
         </div>
-        <div class="accordion-body ${isMonthCollapsed ? 'collapsed' : ''}" id="body-${monthId}"></div>
+        <div class="accordion-body ${isMonthCollapsed ? 'collapsed' : ''}"></div>
       `;
 
       // Month collapse toggle
       monthDiv.querySelector('.month-header').addEventListener('click', (e) => {
         e.stopPropagation();
-        if (state.collapsedSections.has(monthId)) {
-          state.collapsedSections.delete(monthId);
-        } else {
-          state.collapsedSections.add(monthId);
-        }
+        toggleSectionCollapse(monthId);
         renderTimelineView(stripEl, containerEl, list);
       });
 
@@ -779,7 +782,7 @@ function renderTimelineView(stripEl, containerEl, list) {
 }
 
 /* ============================================================
-   Highlight Card Factory (Exact Timestamps & Copy Citation)
+   Highlight Card Factory (Balanced Spacing & Non-colliding Copy)
    ============================================================ */
 function createHighlightCard(h, index, showBook) {
   const card = document.createElement('div');
@@ -796,24 +799,26 @@ function createHighlightCard(h, index, showBook) {
   const dateFormatted = h.date ? formatDate(h.date) : '';
 
   card.innerHTML = `
-    <!-- Copy Quote Button -->
-    <button class="card-copy-btn" data-quote-id="${h.id}" data-tooltip="Copy quote with citation">
-      ${icons.copy}
-    </button>
-
-    <!-- Quote Body -->
+    <!-- Quote Body (starts right at top of card, zero awkward space) -->
     <div class="highlight-text">${text}</div>
 
-    <!-- Metadata Strip with exact hh:mm:ss timestamp -->
+    <!-- Metadata Row with exact timestamp and right-aligned copy quote button -->
     <div class="highlight-meta">
-      ${showBook ? `<span class="meta-pill book-pill">${icons.book} ${escapeHTML(h.bookTitle)}</span>` : ''}
-      ${h.page ? `<span class="meta-pill">${icons.page} p. ${h.page}</span>` : ''}
-      ${h.location ? `<span class="meta-pill">${icons.location} loc. ${h.location}</span>` : ''}
-      ${timeDisplay ? `
-        <span class="meta-pill time-pill" title="Exact clipping timestamp">
-          ${icons.clock} ${state.view === 'timeline' ? timeDisplay : (dateFormatted ? dateFormatted + ' at ' + timeDisplay : timeDisplay)}
-        </span>
-      ` : (dateFormatted ? `<span class="meta-pill">${icons.clock} ${dateFormatted}</span>` : '')}
+      <div class="meta-pills-group">
+        ${showBook ? `<span class="meta-pill book-pill">${icons.book} ${escapeHTML(h.bookTitle)}</span>` : ''}
+        ${h.page ? `<span class="meta-pill">${icons.page} p. ${h.page}</span>` : ''}
+        ${h.location ? `<span class="meta-pill">${icons.location} loc. ${h.location}</span>` : ''}
+        ${timeDisplay ? `
+          <span class="meta-pill time-pill" title="Exact clipping timestamp">
+            ${icons.clock} ${state.view === 'timeline' ? timeDisplay : (dateFormatted ? dateFormatted + ' at ' + timeDisplay : timeDisplay)}
+          </span>
+        ` : (dateFormatted ? `<span class="meta-pill">${icons.clock} ${dateFormatted}</span>` : '')}
+      </div>
+
+      <!-- Copy Quote Button (in footer, right-aligned, zero overlap) -->
+      <button class="card-copy-btn" data-quote-id="${h.id}" data-tooltip="Copy quote with citation">
+        ${icons.copy} <span>Copy</span>
+      </button>
     </div>
   `;
 
@@ -833,11 +838,11 @@ function bindCardCopyButtons(container) {
       if (!textToCopy) return;
 
       navigator.clipboard.writeText(textToCopy).then(() => {
-        btn.innerHTML = icons.check;
+        btn.innerHTML = `${icons.check} <span>Copied!</span>`;
         btn.classList.add('copied');
         showToast('Quote copied to clipboard!');
         setTimeout(() => {
-          btn.innerHTML = icons.copy;
+          btn.innerHTML = `${icons.copy} <span>Copy</span>`;
           btn.classList.remove('copied');
         }, 1800);
       }).catch(err => {

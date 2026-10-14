@@ -98,7 +98,7 @@ input { font: inherit; color: inherit; }
 }
 
 /* ============================================================
-   Minimalist Landing / Upload View (No box clutter)
+   Minimalist Landing / Upload View (Centered & Balanced)
    ============================================================ */
 .upload-view {
   display: flex;
@@ -137,10 +137,10 @@ input { font: inherit; color: inherit; }
   position: relative;
 }
 
-/* Subtle, natural drop highlight without harsh nested boxes */
+/* Subtle drag-over state */
 .upload-view.drag-over .upload-center-card {
   background: var(--accent-subtle);
-  border: 2px dashed var(--accent);
+  outline: 2px dashed var(--accent);
   transform: scale(1.02);
 }
 
@@ -166,14 +166,20 @@ input { font: inherit; color: inherit; }
   line-height: 1.55;
 }
 
-/* Action Row: Button + Help Icon */
+/* Symmetrically Centered Action Row */
 .upload-action-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: .65rem;
+  width: 100%;
   margin-top: .4rem;
+}
+
+.upload-button-wrapper {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .upload-btn {
@@ -197,9 +203,12 @@ input { font: inherit; color: inherit; }
 .upload-btn:active { transform: translateY(0); }
 .upload-btn svg { width: 17px; height: 17px; }
 
-/* Help Icon with Interactive Tooltip */
+/* Help Icon absolutely positioned to the right of the centered button */
 .help-wrapper {
-  position: relative;
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
   display: inline-flex;
   align-items: center;
 }
@@ -646,13 +655,21 @@ input { font: inherit; color: inherit; }
 }
 .action-link-btn {
   font-size: .72rem;
+  font-weight: 500;
   color: var(--text-secondary);
-  padding: .2rem .5rem;
+  padding: .25rem .55rem;
+  border: 1px solid var(--border);
   border-radius: 4px;
+  background: var(--bg-surface);
   white-space: nowrap;
-  transition: color var(--duration) var(--ease);
+  transition: all var(--duration) var(--ease);
+  cursor: pointer;
 }
-.action-link-btn:hover { color: var(--accent); }
+.action-link-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+}
 
 /* --- Highlights Scroll Container --- */
 .highlights-container {
@@ -773,17 +790,20 @@ input { font: inherit; color: inherit; }
 }
 
 /* ============================================================
-   Highlight Cards
+   Highlight Cards (Clean, Balanced Spacing & Non-colliding Copy)
    ============================================================ */
 .highlight-card {
-  padding: 1.1rem 1.3rem;
-  margin-bottom: .75rem;
+  padding: 1.25rem 1.4rem 1.15rem;
+  margin-bottom: .85rem;
   background: var(--bg-surface);
   border: 1px solid var(--border-light);
   border-radius: var(--radius);
   transition: border-color var(--duration) var(--ease),
               box-shadow var(--duration) var(--ease);
   box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
   position: relative;
   animation: slideUp .25s var(--ease) both;
 }
@@ -800,17 +820,25 @@ input { font: inherit; color: inherit; }
   position: relative;
   padding-left: 1.1rem;
   border-left: 3px solid var(--accent);
+  margin: 0;
 }
 
 .highlight-meta {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: .75rem;
-  margin-top: .7rem;
   padding-left: 1.1rem;
   font-size: .74rem;
   color: var(--text-tertiary);
+}
+
+.meta-pills-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem;
 }
 
 .meta-pill {
@@ -837,36 +865,38 @@ input { font: inherit; color: inherit; }
 }
 .book-pill svg { color: var(--accent); }
 
-/* Copy Quote Button */
+/* Polished Copy Quote Button in the footer row (zero overlap) */
 .card-copy-btn {
-  position: absolute;
-  top: .8rem;
-  right: .8rem;
-  width: 28px;
-  height: 28px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 4px;
+  gap: .35rem;
+  padding: .22rem .55rem;
+  font-size: .73rem;
+  font-weight: 500;
   color: var(--text-tertiary);
-  opacity: 0;
-  background: var(--bg);
-  border: 1px solid var(--border-light);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
   transition: all var(--duration) var(--ease);
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .highlight-card:hover .card-copy-btn {
-  opacity: 1;
+  color: var(--text-secondary);
+  border-color: var(--border-light);
+  background: var(--bg);
 }
 .card-copy-btn:hover {
-  color: var(--text);
-  background: var(--bg-hover);
-  border-color: var(--border);
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+  background: var(--accent-subtle) !important;
 }
-.card-copy-btn svg { width: 14px; height: 14px; }
 .card-copy-btn.copied {
-  color: #22c55e;
-  border-color: #22c55e;
+  color: #22c55e !important;
+  border-color: #22c55e !important;
 }
+.card-copy-btn svg { width: 13px; height: 13px; }
 
 /* Highlight for search matches */
 mark {
