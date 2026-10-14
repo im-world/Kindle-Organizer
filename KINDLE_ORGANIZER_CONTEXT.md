@@ -127,6 +127,7 @@ Kindle-Organizer/
 ## 6. Git Commit History
 
 ```text
+e5ea4ad - fix: align landing upload button, persist expand/collapse across all tabs, balance card spacing, and move copy button to footer
 e191447 - fix: minimalist landing page with newbie help tooltip, book sections in all books, and unified search bar with stable cursor
 ca3f356 - feat: enhance landing page, exact timestamps, collapsible navigation, and dark mode
 6459357 - docs: add screenshot, live demo link to README and fix sample fetch base path
