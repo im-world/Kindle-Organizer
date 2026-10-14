@@ -127,6 +127,7 @@ Kindle-Organizer/
 ## 6. Git Commit History
 
 ```text
+ca3f356 - feat: enhance landing page, exact timestamps, collapsible navigation, and dark mode
 6459357 - docs: add screenshot, live demo link to README and fix sample fetch base path
 8998bbd - Fix: conditional base path for dev vs production
 27a8231 - Add GitHub Pages deployment and Vite config
@@ -135,30 +136,42 @@ Kindle-Organizer/
 
 ---
 
-## 7. Status When Session Ended
+## 7. Recent Enhancements Completed (Session 2)
 
-Right before the power disruption:
-1. The agent pushed commit `6459357` to `origin/master`.
-2. GitHub Actions completed deployment successfully.
-3. Live site was verified via HTTP request: `HTTP/1.1 200 OK` at `https://im-world.github.io/Kindle-Organizer/`.
-4. Working tree is **100% clean**, with zero uncommitted changes.
-5. All initial specifications from the prompt were fully achieved and validated.
+1. **Natural & Editorial Landing Page**:
+   - Replaced generic AI dropzone box with an editorial hero layout featuring Lora serif typography.
+   - Dual-card workflow: dedicated tactile file drop studio with USB directory hint (`documents/My Clippings.txt`) and a first-class "Explore Demo Library" preview card with sample book tags.
+   - Trust and privacy strip: 100% client-side execution, instant search, and hierarchical reading index.
+   - Top navigation bar with theme switcher available immediately on the landing page.
+
+2. **Exact Timestamps (`hh:mm:ss`)**:
+   - Extracted exact 12-hour/24-hour timestamps down to the second (e.g. `10:23:45 PM`).
+   - Displayed in dedicated time pills on cards with clock icons, giving the timeline an authentic journal feel.
+
+3. **Inter-Navigation for Avid Readers (100+ Books & Extensive Libraries)**:
+   - **Sidebar**: Real-time book title/author filter with clear button and multi-mode sorting (Recently read, Alphabetical A–Z, Most highlights).
+   - **Timeline View**: Hierarchical grouping by Year -> Month -> Day with collapsible accordion sections and quick Year jump pills (`[All] [2024] [2023]...`), plus "Expand / Collapse All".
+   - **Book View**: Automatic 50-page range grouping (`Pages 1–50`, `Pages 51–100`...) with quick-jump pill strip and collapsible range accordions.
+   - **One-Click Citation Copying**: Hover button on cards to copy quote + citation (`“...” — Author, Title (p. 42)`), accompanied by a custom toast.
+
+4. **Obsidian / Warm Charcoal Dark Mode**:
+   - Replaced muddy yellowish/sepia dark tones (`#1A1614` / `#242019`) with a clean, restful deep charcoal obsidian palette (`#111215` / `#18191F`).
+   - Upgraded quote text contrast to high-legibility ivory (`#F4F2EE`), making the `Lora` serif font razor sharp.
+   - Fixed search `<mark>` background to luminous warm amber (`rgba(226, 157, 98, 0.32)`) for high-contrast visibility.
 
 ---
 
 ## 8. Potential Next Enhancements (Roadmap)
 
-If you wish to expand the app further for your portfolio/resume:
 1. **Export Capabilities**:
-   - Export selected highlights to Markdown (compatible with Obsidian / Logseq).
+   - Export to Markdown (Obsidian / Logseq format).
    - Export to CSV or JSON.
-   - Copy highlight text to clipboard with formatted citation.
-2. **Favorites / Bookmarks**:
-   - Star/favorite specific highlights with a "Favorites" filter in the sidebar.
-3. **Highlight Tagging**:
-   - Allow users to attach custom tags (e.g. `#philosophy`, `#tech`, `#quote`) to highlights.
-4. **Statistics & Reading Insights Dashboard**:
-   - Visual summary card: Total books read, total highlights, top highlighted books, reading frequency.
-5. **Installable Windows App (PWA or Desktop)**:
-   - Add a Web App Manifest and Service Worker for offline PWA installation.
-   - Or package via Tauri / Electron for a native Windows `.exe`.
+2. **Favorites / Starred Highlights**:
+   - Star favorite quotes and filter by "Starred" in sidebar.
+3. **Tags & Categorization**:
+   - Custom tags (`#quote`, `#insights`, `#favorite`).
+4. **Reading Insights Dashboard**:
+   - Reading frequency chart and book completion stats.
+5. **Installable PWA**:
+   - Web App Manifest and Service Worker for offline Windows desktop installation.
+
