@@ -181,6 +181,27 @@ export function groupByBook(highlights) {
 }
 
 /**
+ * Groups an array of highlights by book name into an array of book sections.
+ * @param {Highlight[]} highlights
+ * @returns {{title: string, author: string, highlights: Highlight[]}[]}
+ */
+export function groupHighlightsByBookList(highlights) {
+  const map = new Map();
+  for (const h of highlights) {
+    if (!map.has(h.bookTitle)) {
+      map.set(h.bookTitle, {
+        title: h.bookTitle,
+        author: h.author,
+        highlights: [],
+      });
+    }
+    map.get(h.bookTitle).highlights.push(h);
+  }
+  return [...map.values()].sort((a, b) => a.title.localeCompare(b.title));
+}
+
+
+/**
  * Hierarchical grouping by Year -> Month -> Day for avid readers with years of reading history.
  * @param {Highlight[]} highlights
  * @returns {{year: string, count: number, months: {monthKey: string, monthName: string, count: number, days: {dayKey: string, label: string, date: Date|null, highlights: Highlight[]}[]}[]}[]}

@@ -2,7 +2,7 @@ import './style.css';
 import {
   parseClippings,
   groupByBook,
-  groupByDate,
+  groupHighlightsByBookList,
   groupByTimelineHierarchy,
   groupByPageRanges,
   searchHighlights,
@@ -18,11 +18,10 @@ let state = {
   books: new Map(),
   view: 'books',                 // 'books' | 'timeline'
   selectedBook: null,             // book title string or null (all)
-  bookFilterQuery: '',           // filter books in sidebar
-  bookSortBy: 'recent',          // 'recent' | 'az' | 'count'
-  searchQuery: '',               // search across highlight text/title/author
-  selectedYear: 'all',           // timeline year quick filter
-  selectedPageRange: 'all',      // book view 50-page range quick filter
+  searchQuery: '',               // unified search across highlight text, book, and author
+  selectedYear: 'all',           // timeline year filter
+  selectedPageRange: 'all',      // book view 50-page range filter
+  selectedBookFilter: 'all',     // all-books view jump filter
   collapsedSections: new Set(),  // IDs of sections currently collapsed by user
   theme: localStorage.getItem('kho-theme') || 'light',
 };
@@ -41,9 +40,8 @@ applyTheme();
 function toggleTheme() {
   state.theme = state.theme === 'light' ? 'dark' : 'light';
   applyTheme();
-  // Update toggle button icon across landing or main view
-  const btns = document.querySelectorAll('.theme-toggle-btn');
-  btns.forEach(btn => {
+  // Update all theme toggle buttons currently in the DOM
+  document.querySelectorAll('.theme-toggle-btn').forEach(btn => {
     btn.innerHTML = state.theme === 'light' ? icons.moon : icons.sun;
     btn.setAttribute('data-tooltip', state.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode');
   });
@@ -69,105 +67,51 @@ function showToast(message) {
     toast.style.transform = 'translateY(8px)';
     toast.style.transition = 'all 0.2s ease';
     setTimeout(() => toast.remove(), 200);
-  }, 2200);
+  }, 2000);
 }
 
 /* ============================================================
-   Landing Page — Natural, Editorial, Human-Crafted Hero
+   Minimalist Landing Page (Clean, Warm, No Box Clutter)
    ============================================================ */
 function renderLanding() {
   app.innerHTML = `
-    <div class="landing-view">
-      <header class="landing-navbar">
-        <div class="landing-brand">
-          ${icons.bookOpen}
-          <span>Kindle Highlight Organizer</span>
-        </div>
+    <div class="upload-view" id="upload-view">
+      <!-- Discrete corner theme switch -->
+      <div class="upload-corner-actions">
         <button class="icon-btn theme-toggle-btn" id="landing-theme-toggle" data-tooltip="${state.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}">
           ${state.theme === 'light' ? icons.moon : icons.sun}
         </button>
-      </header>
+      </div>
 
-      <div class="landing-container">
-        <div class="landing-hero">
-          <div class="landing-badge">
-            ${icons.sparkles} Personal Reading Archive
-          </div>
-          <h1 class="landing-title">Rediscover the wisdom in your margins.</h1>
-          <p class="landing-subtitle">
-            Transform your Kindle's <strong>My Clippings.txt</strong> into a serene, searchable personal library.
-            Organized chronologically, indexed by book, and runs 100% privately in your browser.
-          </p>
-        </div>
+      <div class="upload-center-card" id="drop-zone">
+        <div class="upload-icon">${icons.bookOpen}</div>
+        <h1 class="upload-title">Kindle Highlight Organizer</h1>
+        <p class="upload-subtitle">
+          Drop your <strong>My Clippings.txt</strong> file here,<br/>or click to browse.
+        </p>
 
-        <div class="landing-grid">
-          <!-- Drop & Browse Studio Card -->
-          <div class="landing-card drop-card" id="drop-zone">
-            <div class="drop-icon-wrapper">
-              ${icons.bookOpen}
-            </div>
-            <div class="drop-content">
-              <div class="drop-heading">Import Your Clippings</div>
-              <p class="drop-desc">
-                Drag and drop your <strong>My Clippings.txt</strong> here,<br/>or browse from your computer.
-              </p>
-            </div>
-            <button class="btn-primary" id="upload-btn">
-              ${icons.upload} Select Clippings File
+        <div class="upload-action-row">
+          <button class="upload-btn" id="upload-btn">
+            ${icons.upload} Upload Clippings.txt
+          </button>
+
+          <!-- Small Help Icon with Newbie Steps Popover -->
+          <div class="help-wrapper">
+            <button class="help-icon-btn" id="help-btn" type="button" aria-label="Help with exporting clippings">
+              ${icons.helpCircle}
             </button>
-            <div class="drop-hint">
-              ${icons.location} Kindle Drive &gt; <code>documents</code> &gt; <code>My Clippings.txt</code>
-            </div>
-          </div>
-
-          <!-- Instant Demo Library Card -->
-          <div class="landing-card demo-card">
-            <div class="demo-header">
-              <span class="demo-pill">Instant Demo</span>
-              <span class="demo-stats">4 Books · 14 Highlights</span>
-            </div>
-            <div class="demo-body">
-              <div class="demo-title">Explore Sample Library</div>
-              <p class="demo-desc">
-                Don't have your Kindle nearby? Test all sorting, search, timeline, and 50-page navigation features instantly.
-              </p>
-              <div class="demo-tags">
-                <span class="demo-tag">Atomic Habits</span>
-                <span class="demo-tag">The Great Gatsby</span>
-                <span class="demo-tag">Sapiens</span>
-                <span class="demo-tag">1984</span>
-              </div>
-            </div>
-            <button class="btn-secondary" id="sample-btn">
-              ${icons.sparkles} Explore Demo Library ${icons.arrowRight}
-            </button>
-          </div>
-        </div>
-
-        <!-- Trust & Features Strip -->
-        <div class="landing-features">
-          <div class="feature-item">
-            <div class="feature-icon">${icons.shieldCheck}</div>
-            <div class="feature-text">
-              <div class="feature-title">100% Client-Side Privacy</div>
-              <div class="feature-desc">Your personal notes never leave your computer. No cloud servers, no account required.</div>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">${icons.search}</div>
-            <div class="feature-text">
-              <div class="feature-title">Lightning Fast Search</div>
-              <div class="feature-desc">Instant real-time search across hundreds of quotes with live text highlighting.</div>
-            </div>
-          </div>
-          <div class="feature-item">
-            <div class="feature-icon">${icons.layers}</div>
-            <div class="feature-text">
-              <div class="feature-title">Deep Inter-Navigation</div>
-              <div class="feature-desc">Collapsible years/months timeline, 50-page reading sections, and exact timestamps.</div>
+            <div class="help-popover" role="tooltip">
+              <div class="help-popover-title">How to get your clippings:</div>
+              <ol class="help-popover-steps">
+                <li>Connect your Kindle to computer via USB</li>
+                <li>Open the <code>documents</code> folder on Kindle</li>
+                <li>Select <code>My Clippings.txt</code></li>
+              </ol>
             </div>
           </div>
         </div>
+
+        <button class="sample-link" id="sample-btn">or try with sample data</button>
       </div>
 
       <input type="file" id="file-input" accept=".txt" hidden />
@@ -178,6 +122,7 @@ function renderLanding() {
   document.getElementById('landing-theme-toggle').addEventListener('click', toggleTheme);
 
   const dropZone = document.getElementById('drop-zone');
+  const uploadView = document.getElementById('upload-view');
   const fileInput = document.getElementById('file-input');
   const uploadBtn = document.getElementById('upload-btn');
   const sampleBtn = document.getElementById('sample-btn');
@@ -188,32 +133,42 @@ function renderLanding() {
   });
 
   dropZone.addEventListener('click', (e) => {
-    if (e.target !== uploadBtn && !uploadBtn.contains(e.target)) fileInput.click();
+    if (e.target !== uploadBtn && !uploadBtn.contains(e.target) && !e.target.closest('.help-wrapper') && e.target !== sampleBtn) {
+      fileInput.click();
+    }
   });
 
   fileInput.addEventListener('change', (e) => {
     if (e.target.files[0]) handleFile(e.target.files[0]);
   });
 
-  sampleBtn.addEventListener('click', loadSampleData);
+  sampleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    loadSampleData();
+  });
 
-  // Drag and drop handlers
+  // Drag-and-drop on entire view
   ['dragenter', 'dragover'].forEach(name => {
-    dropZone.addEventListener(name, (e) => {
+    window.addEventListener(name, (e) => {
       e.preventDefault();
-      dropZone.classList.add('drag-over');
+      uploadView.classList.add('drag-over');
     });
   });
 
   ['dragleave', 'drop'].forEach(name => {
-    dropZone.addEventListener(name, (e) => {
+    window.addEventListener(name, (e) => {
       e.preventDefault();
-      dropZone.classList.remove('drag-over');
+      if (e.type === 'dragleave' && e.relatedTarget !== null) return;
+      uploadView.classList.remove('drag-over');
     });
   });
 
-  dropZone.addEventListener('drop', (e) => {
-    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  window.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadView.classList.remove('drag-over');
+    if (e.dataTransfer && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0]);
+    }
   });
 }
 
@@ -232,11 +187,10 @@ function loadRaw(raw) {
   state.highlights = parseClippings(raw);
   state.books = groupByBook(state.highlights);
   state.selectedBook = null;
-  state.bookFilterQuery = '';
-  state.bookSortBy = 'recent';
   state.searchQuery = '';
   state.selectedYear = 'all';
   state.selectedPageRange = 'all';
+  state.selectedBookFilter = 'all';
   state.collapsedSections.clear();
   renderMain();
 }
@@ -266,46 +220,13 @@ function renderMain() {
 }
 
 /* ============================================================
-   Book Filtering & Sorting for Avid Readers (100+ Books)
-   ============================================================ */
-function getSortedFilteredBooks() {
-  let list = [...state.books.values()];
-
-  // Filter books by title or author
-  if (state.bookFilterQuery.trim()) {
-    const q = state.bookFilterQuery.toLowerCase();
-    list = list.filter(b =>
-      b.title.toLowerCase().includes(q) ||
-      (b.author && b.author.toLowerCase().includes(q))
-    );
-  }
-
-  // Sort
-  if (state.bookSortBy === 'recent') {
-    list.sort((a, b) => {
-      const timeA = a.latestDate ? a.latestDate.getTime() : 0;
-      const timeB = b.latestDate ? b.latestDate.getTime() : 0;
-      return timeB - timeA;
-    });
-  } else if (state.bookSortBy === 'count') {
-    list.sort((a, b) => b.totalCount - a.totalCount);
-  } else {
-    // Alphabetical
-    list.sort((a, b) => a.title.localeCompare(b.title));
-  }
-
-  return list;
-}
-
-/* ============================================================
-   Sidebar Rendering
+   Sidebar (With Single Smooth Unified Search Bar)
    ============================================================ */
 function renderSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
 
-  const booksArr = getSortedFilteredBooks();
-  const totalBooksCount = state.books.size;
+  const booksArr = [...state.books.values()];
 
   sidebar.innerHTML = `
     <div class="sidebar-header">
@@ -320,24 +241,14 @@ function renderSidebar() {
         <button id="view-timeline" class="${state.view === 'timeline' ? 'active' : ''}">Timeline</button>
       </div>
 
-      <!-- Quick Book Filter Search (for 100+ books) -->
-      <div class="sidebar-search-box">
+      <!-- Single Unified Search Bar: Matches quote, book, and author -->
+      <div class="search-box">
         <span class="search-icon">${icons.search}</span>
-        <input type="text" class="sidebar-search-input" id="sidebar-book-filter"
-               placeholder="Filter books or authors…" value="${escapeAttr(state.bookFilterQuery)}" />
-        ${state.bookFilterQuery ? `
-          <button class="clear-search-btn" id="clear-book-filter" title="Clear filter">${icons.x}</button>
-        ` : ''}
-      </div>
-
-      <!-- Book Sort Options -->
-      <div class="sidebar-sort-bar">
-        <span>${booksArr.length}${booksArr.length !== totalBooksCount ? ' of ' + totalBooksCount : ''} books</span>
-        <div class="sort-options">
-          <button class="sort-btn ${state.bookSortBy === 'recent' ? 'active' : ''}" data-sort="recent" title="Recently read/highlighted">Recent</button>
-          <button class="sort-btn ${state.bookSortBy === 'az' ? 'active' : ''}" data-sort="az" title="Alphabetical">A–Z</button>
-          <button class="sort-btn ${state.bookSortBy === 'count' ? 'active' : ''}" data-sort="count" title="Most highlights">Count</button>
-        </div>
+        <input type="text" class="search-input" id="search-input"
+               placeholder="Search highlights, books, authors…" value="${escapeAttr(state.searchQuery)}" />
+        <button class="clear-search-btn" id="clear-search" style="display: ${state.searchQuery ? 'flex' : 'none'};" title="Clear search">
+          ${icons.x}
+        </button>
       </div>
     </div>
 
@@ -348,7 +259,7 @@ function renderSidebar() {
         <div class="book-info">
           <div class="book-title-text">All Books</div>
         </div>
-        <span class="book-count">${state.highlights.length}</span>
+        <span class="book-count" id="all-books-count">${state.highlights.length}</span>
       </div>
 
       ${booksArr.map(b => `
@@ -361,17 +272,11 @@ function renderSidebar() {
           <span class="book-count">${b.highlights.length}</span>
         </div>
       `).join('')}
-
-      ${booksArr.length === 0 ? `
-        <div style="padding: 1.5rem 1rem; text-align: center; color: var(--text-tertiary); font-size: 0.8rem;">
-          No books found matching "${escapeHTML(state.bookFilterQuery)}"
-        </div>
-      ` : ''}
     </div>
 
     <!-- Sidebar Footer -->
     <div class="sidebar-footer">
-      <span class="total-count">${state.highlights.length} clips · ${totalBooksCount} books</span>
+      <span class="total-count">${state.highlights.length} highlights · ${booksArr.length} books</span>
       <div class="sidebar-actions">
         <button class="icon-btn theme-toggle-btn" id="theme-toggle" data-tooltip="${state.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}">
           ${state.theme === 'light' ? icons.moon : icons.sun}
@@ -383,10 +288,11 @@ function renderSidebar() {
     </div>
   `;
 
-  // Bind Sidebar Events
+  // Bind View Switch
   document.getElementById('view-books').addEventListener('click', () => {
     state.view = 'books';
     state.selectedPageRange = 'all';
+    state.selectedBookFilter = 'all';
     renderSidebar();
     renderContent();
   });
@@ -398,62 +304,60 @@ function renderSidebar() {
     renderContent();
   });
 
-  // Book filter typing (with debounce)
-  const bookFilterInput = document.getElementById('sidebar-book-filter');
-  let filterDebounce;
-  bookFilterInput.addEventListener('input', () => {
-    clearTimeout(filterDebounce);
-    filterDebounce = setTimeout(() => {
-      state.bookFilterQuery = bookFilterInput.value;
-      renderSidebar();
+  // Single Unified Search Input (Never re-renders sidebar, so cursor stays intact!)
+  const searchInput = document.getElementById('search-input');
+  const clearSearchBtn = document.getElementById('clear-search');
+  let searchDebounce;
+
+  searchInput.addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    const val = searchInput.value;
+    clearSearchBtn.style.display = val ? 'flex' : 'none';
+
+    searchDebounce = setTimeout(() => {
+      state.searchQuery = val;
+      renderContent();
     }, 120);
   });
 
-  const clearFilterBtn = document.getElementById('clear-book-filter');
-  if (clearFilterBtn) {
-    clearFilterBtn.addEventListener('click', () => {
-      state.bookFilterQuery = '';
-      renderSidebar();
-    });
-  }
-
-  // Book sorting buttons
-  document.querySelectorAll('.sort-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.bookSortBy = btn.dataset.sort;
-      renderSidebar();
-    });
+  clearSearchBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    state.searchQuery = '';
+    clearSearchBtn.style.display = 'none';
+    searchInput.focus();
+    renderContent();
   });
 
-  // Book selection
+  // Book Selection from Sidebar List
   document.getElementById('book-list').addEventListener('click', (e) => {
     const item = e.target.closest('.book-item');
     if (!item) return;
     const bookKey = item.dataset.book;
     state.selectedBook = bookKey === '__all__' ? null : bookKey;
     state.selectedPageRange = 'all';
+    state.selectedBookFilter = 'all';
+
     document.querySelectorAll('.book-item').forEach(el => el.classList.remove('active'));
     item.classList.add('active');
     renderContent();
   });
 
-  // Theme toggle
+  // Theme Toggle
   document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
 
-  // New file / reset
+  // Open New File / Reset
   document.getElementById('new-file-btn').addEventListener('click', () => {
     state.highlights = [];
     state.books = new Map();
     state.selectedBook = null;
     state.searchQuery = '';
-    state.bookFilterQuery = '';
     state.collapsedSections.clear();
     renderLanding();
   });
 }
 
 /* ============================================================
-   Content Area & Inter-Navigation Rendering
+   Content Area Rendering
    ============================================================ */
 function renderContent() {
   const content = document.getElementById('content');
@@ -464,7 +368,7 @@ function renderContent() {
     ? (state.books.get(state.selectedBook)?.highlights || [])
     : state.highlights;
 
-  // Filter by search query across text, book title, and author
+  // Apply unified search across quotes, book titles, and authors
   if (state.searchQuery.trim()) {
     list = searchHighlights(list, state.searchQuery);
   }
@@ -472,84 +376,168 @@ function renderContent() {
   // Header Details
   const title = state.view === 'timeline'
     ? (state.selectedBook ? `${state.selectedBook} — Timeline` : 'Timeline')
-    : (state.selectedBook || 'All Highlights');
+    : (state.selectedBook || 'All Books');
 
   const subtitle = state.view === 'timeline'
     ? 'Chronological reading journey with exact timestamps'
-    : (state.selectedBook ? (state.books.get(state.selectedBook)?.author || 'Selected book highlights') : 'Showing all highlights across your library');
+    : (state.selectedBook ? (state.books.get(state.selectedBook)?.author || 'Selected book') : 'Organized by book title');
 
+  // Simple, clean header with NO duplicate search input
   content.innerHTML = `
     <div class="content-header">
       <div class="content-title-area">
         <h1 class="content-title" title="${escapeAttr(title)}">${escapeHTML(title)}</h1>
         <div class="content-subtitle">${escapeHTML(subtitle)}</div>
       </div>
-
-      <div class="content-header-actions">
-        <!-- Live Highlight Search Bar -->
-        <div class="content-search-box">
-          <span class="search-icon">${icons.search}</span>
-          <input type="text" class="content-search-input" id="content-search"
-                 placeholder="Search quote or author…" value="${escapeAttr(state.searchQuery)}" />
-          ${state.searchQuery ? `
-            <button class="clear-search-btn" id="clear-content-search" title="Clear search">${icons.x}</button>
-          ` : ''}
-        </div>
-        <div class="content-meta-badge">${list.length} highlight${list.length !== 1 ? 's' : ''}</div>
-      </div>
+      <div class="content-meta-badge">${list.length} highlight${list.length !== 1 ? 's' : ''}</div>
     </div>
 
-    <!-- Quick-Jump & Inter-Navigation Strip -->
+    <!-- Quick Jump Strip (Books in All-Books view / Pages in Single-Book view / Years in Timeline) -->
     <div id="jump-strip" class="jump-strip-container"></div>
 
     <!-- Highlights Container -->
     <div class="highlights-container" id="highlights-container"></div>
   `;
 
-  // Bind Content Search
-  const searchInput = document.getElementById('content-search');
-  let searchDebounce;
-  searchInput.addEventListener('input', () => {
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => {
-      state.searchQuery = searchInput.value;
-      renderContent();
-    }, 150);
-  });
-
-  const clearSearchBtn = document.getElementById('clear-content-search');
-  if (clearSearchBtn) {
-    clearSearchBtn.addEventListener('click', () => {
-      state.searchQuery = '';
-      renderContent();
-    });
-  }
-
-  // Check Empty
+  // Empty State Check
   if (list.length === 0) {
     document.getElementById('jump-strip').style.display = 'none';
     document.getElementById('highlights-container').innerHTML = `
       <div class="empty-content">
         ${icons.search}
-        <p>${state.searchQuery ? `No highlights match "${escapeHTML(state.searchQuery)}".` : 'No highlights to show in this view.'}</p>
+        <p>${state.searchQuery ? `No highlights match "${escapeHTML(state.searchQuery)}".` : 'No highlights to show.'}</p>
       </div>
     `;
     return;
   }
 
-  // Route to Timeline or Book View
+  // Route to the appropriate view
   if (state.view === 'timeline') {
     renderTimelineView(document.getElementById('jump-strip'), document.getElementById('highlights-container'), list);
+  } else if (state.selectedBook === null) {
+    // ALL BOOKS view: Sections organized BY BOOK NAME!
+    renderAllBooksView(document.getElementById('jump-strip'), document.getElementById('highlights-container'), list);
   } else {
-    renderBookView(document.getElementById('jump-strip'), document.getElementById('highlights-container'), list);
+    // SINGLE BOOK view: Sections organized BY 50-PAGE RANGES!
+    renderSingleBookView(document.getElementById('jump-strip'), document.getElementById('highlights-container'), list);
   }
 }
 
 /* ============================================================
-   Book View — Arranged with 50-Page Range Collapsible Sections
+   All Books View — Organized by Book Name
+   (Page numbers across multiple books are not mixed)
    ============================================================ */
-function renderBookView(stripEl, containerEl, list) {
-  // If viewing a specific book or large list, group into 50-page sections
+function renderAllBooksView(stripEl, containerEl, list) {
+  // Group highlights by book name
+  const bookGroups = groupHighlightsByBookList(list);
+
+  // If there are multiple books, show the book jump strip & expand/collapse toggle
+  if (bookGroups.length > 1) {
+    stripEl.style.display = 'flex';
+    stripEl.innerHTML = `
+      <div class="jump-label">${icons.book} Books:</div>
+      <div class="jump-pills">
+        <button class="jump-pill ${state.selectedBookFilter === 'all' ? 'active' : ''}" data-book-filter="all">
+          All (${list.length})
+        </button>
+        ${bookGroups.map(bg => `
+          <button class="jump-pill ${state.selectedBookFilter === bg.title ? 'active' : ''}" data-book-filter="${escapeAttr(bg.title)}">
+            ${escapeHTML(bg.title)} (${bg.highlights.length})
+          </button>
+        `).join('')}
+      </div>
+      <div class="jump-actions">
+        <button class="action-link-btn" id="toggle-all-book-sections">Expand / Collapse All</button>
+      </div>
+    `;
+
+    // Bind Book Jump Pills
+    stripEl.querySelectorAll('.jump-pill').forEach(pill => {
+      pill.addEventListener('click', () => {
+        state.selectedBookFilter = pill.dataset.bookFilter;
+        renderAllBooksView(stripEl, containerEl, list);
+      });
+    });
+
+    // Expand / Collapse All
+    document.getElementById('toggle-all-book-sections')?.addEventListener('click', () => {
+      const allCollapsed = bookGroups.every(bg => state.collapsedSections.has(`book-${bg.title}`));
+      if (allCollapsed) {
+        bookGroups.forEach(bg => state.collapsedSections.delete(`book-${bg.title}`));
+      } else {
+        bookGroups.forEach(bg => state.collapsedSections.add(`book-${bg.title}`));
+      }
+      renderAllBooksView(stripEl, containerEl, list);
+    });
+
+    // Filter by selected book pill if active
+    const visibleBookGroups = state.selectedBookFilter === 'all'
+      ? bookGroups
+      : bookGroups.filter(bg => bg.title === state.selectedBookFilter);
+
+    containerEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    let cardIdx = 0;
+
+    visibleBookGroups.forEach(bg => {
+      const sectionId = `book-${bg.title}`;
+      const isCollapsed = state.collapsedSections.has(sectionId);
+
+      const groupDiv = document.createElement('div');
+      groupDiv.className = 'collapsible-group';
+
+      groupDiv.innerHTML = `
+        <div class="accordion-header ${isCollapsed ? 'collapsed' : ''}" data-section-id="${escapeAttr(sectionId)}">
+          <div class="accordion-title-area">
+            <span class="accordion-chevron">${icons.chevronDown}</span>
+            <span class="book-icon">${icons.book}</span>
+            <span class="accordion-title">${escapeHTML(bg.title)}</span>
+            ${bg.author ? `<span class="accordion-author">by ${escapeHTML(bg.author)}</span>` : ''}
+            <span class="accordion-badge">${bg.highlights.length} highlight${bg.highlights.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}" id="body-${escapeAttr(sectionId)}"></div>
+      `;
+
+      // Accordion click toggle
+      groupDiv.querySelector('.accordion-header').addEventListener('click', () => {
+        if (state.collapsedSections.has(sectionId)) {
+          state.collapsedSections.delete(sectionId);
+        } else {
+          state.collapsedSections.add(sectionId);
+        }
+        renderAllBooksView(stripEl, containerEl, list);
+      });
+
+      // Append cards
+      const bodyEl = groupDiv.querySelector('.accordion-body');
+      bg.highlights.forEach(h => {
+        bodyEl.appendChild(createHighlightCard(h, cardIdx++, false));
+      });
+
+      frag.appendChild(groupDiv);
+    });
+
+    containerEl.appendChild(frag);
+  } else {
+    // Only 1 book in list: render flat
+    stripEl.style.display = 'none';
+    containerEl.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    list.forEach((h, idx) => {
+      frag.appendChild(createHighlightCard(h, idx, true));
+    });
+    containerEl.appendChild(frag);
+  }
+
+  bindCardCopyButtons(containerEl);
+}
+
+/* ============================================================
+   Single Book View — Organized with 50-Page Range Sections
+   ============================================================ */
+function renderSingleBookView(stripEl, containerEl, list) {
+  // Group highlights of this specific book into 50-page sections
   const pageSections = groupByPageRanges(list, 50);
 
   // If there are multiple page sections, show the quick-jump bar and collapsible accordions
@@ -568,7 +556,7 @@ function renderBookView(stripEl, containerEl, list) {
         `).join('')}
       </div>
       <div class="jump-actions">
-        <button class="action-link-btn" id="toggle-all-sections">Expand / Collapse All</button>
+        <button class="action-link-btn" id="toggle-all-page-sections">Expand / Collapse All</button>
       </div>
     `;
 
@@ -576,19 +564,19 @@ function renderBookView(stripEl, containerEl, list) {
     stripEl.querySelectorAll('.jump-pill').forEach(pill => {
       pill.addEventListener('click', () => {
         state.selectedPageRange = pill.dataset.range;
-        renderBookView(stripEl, containerEl, list);
+        renderSingleBookView(stripEl, containerEl, list);
       });
     });
 
     // Expand / Collapse All
-    document.getElementById('toggle-all-sections')?.addEventListener('click', () => {
+    document.getElementById('toggle-all-page-sections')?.addEventListener('click', () => {
       const allCollapsed = pageSections.every(sec => state.collapsedSections.has(sec.id));
       if (allCollapsed) {
         pageSections.forEach(sec => state.collapsedSections.delete(sec.id));
       } else {
         pageSections.forEach(sec => state.collapsedSections.add(sec.id));
       }
-      renderBookView(stripEl, containerEl, list);
+      renderSingleBookView(stripEl, containerEl, list);
     });
 
     // Filter by selected range if active
@@ -622,13 +610,13 @@ function renderBookView(stripEl, containerEl, list) {
         } else {
           state.collapsedSections.add(section.id);
         }
-        renderBookView(stripEl, containerEl, list);
+        renderSingleBookView(stripEl, containerEl, list);
       });
 
       // Append cards
-      const bodyEl = groupDiv.querySelector(`#body-${section.id}`);
+      const bodyEl = groupDiv.querySelector('.accordion-body');
       section.highlights.forEach((h, idx) => {
-        bodyEl.appendChild(createHighlightCard(h, idx, state.selectedBook === null));
+        bodyEl.appendChild(createHighlightCard(h, idx, false));
       });
 
       frag.appendChild(groupDiv);
@@ -641,7 +629,7 @@ function renderBookView(stripEl, containerEl, list) {
     containerEl.innerHTML = '';
     const frag = document.createDocumentFragment();
     list.forEach((h, idx) => {
-      frag.appendChild(createHighlightCard(h, idx, state.selectedBook === null));
+      frag.appendChild(createHighlightCard(h, idx, false));
     });
     containerEl.appendChild(frag);
   }
@@ -650,7 +638,7 @@ function renderBookView(stripEl, containerEl, list) {
 }
 
 /* ============================================================
-   Timeline View — Hierarchical Years & Months with Collapsibility
+   Timeline View — Hierarchical Years & Months
    ============================================================ */
 function renderTimelineView(stripEl, containerEl, list) {
   const hierarchy = groupByTimelineHierarchy(list);
@@ -736,7 +724,7 @@ function renderTimelineView(stripEl, containerEl, list) {
       renderTimelineView(stripEl, containerEl, list);
     });
 
-    const yearBody = yearDiv.querySelector(`#body-${yearId}`);
+    const yearBody = yearDiv.querySelector('.accordion-body');
 
     // Render Months inside Year
     yearObj.months.forEach(monthObj => {
@@ -766,7 +754,7 @@ function renderTimelineView(stripEl, containerEl, list) {
         renderTimelineView(stripEl, containerEl, list);
       });
 
-      const monthBody = monthDiv.querySelector(`#body-${monthId}`);
+      const monthBody = monthDiv.querySelector('.accordion-body');
 
       // Render Days inside Month
       monthObj.days.forEach(day => {
@@ -791,7 +779,7 @@ function renderTimelineView(stripEl, containerEl, list) {
 }
 
 /* ============================================================
-   Highlight Card Factory (Exact hh:mm:ss Timestamps & Copy)
+   Highlight Card Factory (Exact Timestamps & Copy Citation)
    ============================================================ */
 function createHighlightCard(h, index, showBook) {
   const card = document.createElement('div');
