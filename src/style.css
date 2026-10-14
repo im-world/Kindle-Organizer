@@ -203,7 +203,7 @@ input { font: inherit; color: inherit; }
 .upload-btn:active { transform: translateY(0); }
 .upload-btn svg { width: 17px; height: 17px; }
 
-/* Help Icon absolutely positioned to the right of the centered button */
+/* Help Icon absolutely positioned to the right (does not offset the button) */
 .help-wrapper {
   position: absolute;
   left: calc(100% + 12px);
@@ -335,15 +335,14 @@ input { font: inherit; color: inherit; }
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .sidebar-header {
-  padding: .95rem 1rem .75rem;
+  padding: .95rem 1rem .65rem;
   border-bottom: 1px solid var(--border-light);
   display: flex;
   flex-direction: column;
-  gap: .65rem;
+  gap: .6rem;
 }
 
 .app-brand {
@@ -437,6 +436,42 @@ input { font: inherit; color: inherit; }
 .clear-search-btn:hover { color: var(--text); }
 .clear-search-btn svg { width: 12px; height: 12px; }
 
+/* Sidebar Sort Bar (Handy Sorting by Recent, A-Z, Count) */
+.sidebar-sort-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .1rem .2rem 0;
+  font-size: .72rem;
+  color: var(--text-tertiary);
+}
+.sort-label {
+  font-size: .71rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+.sort-options {
+  display: flex;
+  gap: .25rem;
+}
+.sort-btn {
+  padding: .18rem .45rem;
+  border-radius: 4px;
+  font-size: .71rem;
+  color: var(--text-secondary);
+  background: transparent;
+  transition: all var(--duration) var(--ease);
+}
+.sort-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.sort-btn.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* Book list in Sidebar */
 .book-list {
   flex: 1;
@@ -502,13 +537,15 @@ input { font: inherit; color: inherit; }
   color: #fff;
 }
 
-/* Sidebar Footer */
+/* Sidebar Footer (Overflow visible so tooltip is never truncated) */
 .sidebar-footer {
   padding: .55rem .85rem;
   border-top: 1px solid var(--border-light);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  overflow: visible;
+  position: relative;
 }
 
 .total-count {
@@ -582,6 +619,14 @@ input { font: inherit; color: inherit; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Side-by-side badges: e.g. [184 books] [11,420 highlights] */
+.content-header-badges {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-shrink: 0;
 }
 
 .content-meta-badge {
@@ -971,7 +1016,7 @@ mark {
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
-/* Tooltip */
+/* Tooltip (Default centered) */
 [data-tooltip] {
   position: relative;
 }
@@ -990,11 +1035,23 @@ mark {
   pointer-events: none;
   opacity: 0;
   transition: opacity var(--duration) var(--ease), transform var(--duration) var(--ease);
-  z-index: 20;
+  z-index: 1000;
 }
 [data-tooltip]:hover::after {
   opacity: 1;
   transform: translateX(-50%) scale(1);
+}
+
+/* Tooltip on right-aligned buttons (e.g. sidebar footer) — Anchored right so it NEVER truncates */
+.sidebar-footer [data-tooltip]::after,
+[data-tooltip-pos="left"]::after {
+  left: auto;
+  right: 0;
+  transform: translateY(-4px) scale(.95);
+}
+.sidebar-footer [data-tooltip]:hover::after,
+[data-tooltip-pos="left"]:hover::after {
+  transform: translateY(0) scale(1);
 }
 
 /* Responsive adjustments */

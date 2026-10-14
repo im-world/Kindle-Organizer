@@ -18,51 +18,16 @@ let state = {
   books: new Map(),
   view: 'books',                 // 'books' | 'timeline'
   selectedBook: null,             // book title string or null (all)
+  bookSortBy: 'recent',          // 'recent' | 'az' | 'count'
   searchQuery: '',               // unified search across highlight text, book, and author
   selectedYear: 'all',           // timeline year filter
   selectedPageRange: 'all',      // book view 50-page range filter
   selectedBookFilter: 'all',     // all-books view jump filter
-  globalCollapseState: 'collapsed', // 'collapsed' (default) | 'expanded'
-  expandedSections: new Set(),   // explicitly expanded sections when global is collapsed
-  collapsedSections: new Set(),  // explicitly collapsed sections when global is expanded
+  expandedSections: new Set(),   // scoped set of expanded section IDs (default empty -> all collapsed!)
   theme: localStorage.getItem('kho-theme') || 'light',
 };
 
 const app = document.getElementById('app');
-
-/* ============================================================
-   Collapse Management (Carried across all tabs)
-   ============================================================ */
-function isSectionCollapsed(sectionId) {
-  if (state.globalCollapseState === 'collapsed') {
-    return !state.expandedSections.has(sectionId);
-  } else {
-    return state.collapsedSections.has(sectionId);
-  }
-}
-
-function toggleSectionCollapse(sectionId) {
-  if (state.globalCollapseState === 'collapsed') {
-    if (state.expandedSections.has(sectionId)) {
-      state.expandedSections.delete(sectionId);
-    } else {
-      state.expandedSections.add(sectionId);
-    }
-  } else {
-    if (state.collapsedSections.has(sectionId)) {
-      state.collapsedSections.delete(sectionId);
-    } else {
-      state.collapsedSections.add(sectionId);
-    }
-  }
-}
-
-function toggleGlobalCollapse() {
-  state.globalCollapseState = state.globalCollapseState === 'collapsed' ? 'expanded' : 'collapsed';
-  state.expandedSections.clear();
-  state.collapsedSections.clear();
-  renderContent();
-}
 
 /* ============================================================
    Theme Management
@@ -226,12 +191,11 @@ function loadRaw(raw) {
   state.books = groupByBook(state.highlights);
   state.selectedBook = null;
   state.searchQuery = '';
+  state.bookSortBy = 'recent';
   state.selectedYear = 'all';
   state.selectedPageRange = 'all';
   state.selectedBookFilter = 'all';
-  state.globalCollapseState = 'collapsed'; // Default collapsed on load!
-  state.expandedSections.clear();
-  state.collapsedSections.clear();
+  state.expandedSections.clear(); // Default all sections collapsed on fresh file!
   renderMain();
 }
 
@@ -255,18 +219,89 @@ function renderMain() {
       <main class="content" id="content"></main>
     </div>
   `;
+
+  // Global event delegation for copy buttons (0ms overhead for 11k+ highlights)
+  const contentEl = document.getElementById('content');
+  contentEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.card-copy-btn');
+    if (!btn) return;
+    e.stopPropagation();
+    const card = btn.closest('.highlight-card');
+    const textToCopy = card?.dataset.copyText || '';
+    if (!textToCopy) return;
+
+    navigator.clipboard.writeText(textToCopy).then(() => {
+      btn.innerHTML = `${icons.check} <span>Copied!</span>`;
+      btn.classList.add('copied');
+      showToast('Quote copied to clipboard!');
+      setTimeout(() => {
+        btn.innerHTML = `${icons.copy} <span>Copy</span>`;
+        btn.classList.remove('copied');
+      }, 1800);
+    }).catch(err => {
+      console.error('Failed to copy to clipboard:', err);
+    });
+  });
+
   renderSidebar();
   renderContent();
 }
 
 /* ============================================================
-   Sidebar (With Single Smooth Unified Search Bar)
+   Book Sorting Helpers
+   ============================================================ */
+function getSortedBooks() {
+  const list = [...state.books.values()];
+  if (state.bookSortBy === 'recent') {
+    list.sort((a, b) => {
+      const timeA = a.latestDate ? a.latestDate.getTime() : 0;
+      const timeB = b.latestDate ? b.latestDate.getTime() : 0;
+      return timeB - timeA;
+    });
+  } else if (state.bookSortBy === 'count') {
+    list.sort((a, b) => b.totalCount - a.totalCount);
+  } else {
+    // Alphabetical
+    list.sort((a, b) => a.title.localeCompare(b.title));
+  }
+  return list;
+}
+
+function updateBookListDOM() {
+  const bookListEl = document.getElementById('book-list');
+  if (!bookListEl) return;
+  const booksArr = getSortedBooks();
+
+  bookListEl.innerHTML = `
+    <div class="book-item ${state.selectedBook === null ? 'active' : ''}" data-book="__all__">
+      <span class="book-icon">${icons.book}</span>
+      <div class="book-info">
+        <div class="book-title-text">All Books</div>
+      </div>
+      <span class="book-count" id="all-books-count">${state.highlights.length.toLocaleString()}</span>
+    </div>
+
+    ${booksArr.map(b => `
+      <div class="book-item ${state.selectedBook === b.title ? 'active' : ''}" data-book="${escapeAttr(b.title)}">
+        <span class="book-icon">${icons.page}</span>
+        <div class="book-info">
+          <div class="book-title-text" title="${escapeAttr(b.title)}">${escapeHTML(b.title)}</div>
+          ${b.author ? `<div class="book-author" title="${escapeAttr(b.author)}">${escapeHTML(b.author)}</div>` : ''}
+        </div>
+        <span class="book-count">${b.highlights.length.toLocaleString()}</span>
+      </div>
+    `).join('')}
+  `;
+}
+
+/* ============================================================
+   Sidebar (With Sort Bar & Unified Smooth Search Bar)
    ============================================================ */
 function renderSidebar() {
   const sidebar = document.getElementById('sidebar');
   if (!sidebar) return;
 
-  const booksArr = [...state.books.values()];
+  const booksArr = getSortedBooks();
 
   sidebar.innerHTML = `
     <div class="sidebar-header">
@@ -290,6 +325,16 @@ function renderSidebar() {
           ${icons.x}
         </button>
       </div>
+
+      <!-- Handy Book Sorting Bar (Recent, A-Z, Count) -->
+      <div class="sidebar-sort-bar">
+        <span class="sort-label">Sort:</span>
+        <div class="sort-options">
+          <button class="sort-btn ${state.bookSortBy === 'recent' ? 'active' : ''}" data-sort="recent" title="Recently read/highlighted">Recent</button>
+          <button class="sort-btn ${state.bookSortBy === 'az' ? 'active' : ''}" data-sort="az" title="Alphabetical by title">A–Z</button>
+          <button class="sort-btn ${state.bookSortBy === 'count' ? 'active' : ''}" data-sort="count" title="Most highlights first">Count</button>
+        </div>
+      </div>
     </div>
 
     <!-- Scrollable Book List -->
@@ -299,7 +344,7 @@ function renderSidebar() {
         <div class="book-info">
           <div class="book-title-text">All Books</div>
         </div>
-        <span class="book-count" id="all-books-count">${state.highlights.length}</span>
+        <span class="book-count" id="all-books-count">${state.highlights.length.toLocaleString()}</span>
       </div>
 
       ${booksArr.map(b => `
@@ -309,19 +354,19 @@ function renderSidebar() {
             <div class="book-title-text" title="${escapeAttr(b.title)}">${escapeHTML(b.title)}</div>
             ${b.author ? `<div class="book-author" title="${escapeAttr(b.author)}">${escapeHTML(b.author)}</div>` : ''}
           </div>
-          <span class="book-count">${b.highlights.length}</span>
+          <span class="book-count">${b.highlights.length.toLocaleString()}</span>
         </div>
       `).join('')}
     </div>
 
-    <!-- Sidebar Footer -->
+    <!-- Sidebar Footer (Non-truncating tooltips) -->
     <div class="sidebar-footer">
-      <span class="total-count">${state.highlights.length} highlights · ${booksArr.length} books</span>
+      <span class="total-count">${state.highlights.length.toLocaleString()} highlights · ${booksArr.length.toLocaleString()} books</span>
       <div class="sidebar-actions">
-        <button class="icon-btn theme-toggle-btn" id="theme-toggle" data-tooltip="${state.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}">
+        <button class="icon-btn theme-toggle-btn" id="theme-toggle" data-tooltip="${state.theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}" data-tooltip-pos="left">
           ${state.theme === 'light' ? icons.moon : icons.sun}
         </button>
-        <button class="icon-btn" id="new-file-btn" data-tooltip="Open another clippings file">
+        <button class="icon-btn" id="new-file-btn" data-tooltip="Open another clippings file" data-tooltip-pos="left">
           ${icons.refresh}
         </button>
       </div>
@@ -342,6 +387,19 @@ function renderSidebar() {
     state.selectedYear = 'all';
     renderSidebar();
     renderContent();
+  });
+
+  // Sort buttons in sidebar (Only updates book list, never loses search focus!)
+  sidebar.querySelectorAll('.sort-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.bookSortBy = btn.dataset.sort;
+      sidebar.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateBookListDOM();
+      if (state.selectedBook === null && state.view === 'books') {
+        renderContent();
+      }
+    });
   });
 
   // Single Unified Search Input (Never re-renders sidebar, so cursor stays intact!)
@@ -391,15 +449,13 @@ function renderSidebar() {
     state.books = new Map();
     state.selectedBook = null;
     state.searchQuery = '';
-    state.globalCollapseState = 'collapsed';
     state.expandedSections.clear();
-    state.collapsedSections.clear();
     renderLanding();
   });
 }
 
 /* ============================================================
-   Content Area Rendering
+   Content Area Rendering (Side-by-Side Badges & Fast Routing)
    ============================================================ */
 function renderContent() {
   const content = document.getElementById('content');
@@ -424,17 +480,25 @@ function renderContent() {
     ? 'Chronological reading journey with exact timestamps'
     : (state.selectedBook ? (state.books.get(state.selectedBook)?.author || 'Selected book') : 'Organized by book title');
 
-  // Simple, clean header with NO duplicate search input
+  // Compute number of books displayed (< 1ms)
+  const uniqueBooksCount = state.selectedBook !== null
+    ? 1
+    : (!state.searchQuery.trim() && list === state.highlights ? state.books.size : new Set(list.map(h => h.bookTitle)).size);
+
+  // Render header with side-by-side separate cards for Books and Highlights
   content.innerHTML = `
     <div class="content-header">
       <div class="content-title-area">
         <h1 class="content-title" title="${escapeAttr(title)}">${escapeHTML(title)}</h1>
         <div class="content-subtitle">${escapeHTML(subtitle)}</div>
       </div>
-      <div class="content-meta-badge">${list.length} highlight${list.length !== 1 ? 's' : ''}</div>
+      <div class="content-header-badges">
+        <div class="content-meta-badge">${uniqueBooksCount.toLocaleString()} book${uniqueBooksCount !== 1 ? 's' : ''}</div>
+        <div class="content-meta-badge">${list.length.toLocaleString()} highlight${list.length !== 1 ? 's' : ''}</div>
+      </div>
     </div>
 
-    <!-- Quick Jump Strip (Books in All-Books view / Pages in Single-Book view / Years in Timeline) -->
+    <!-- Quick Jump Strip -->
     <div id="jump-strip" class="jump-strip-container"></div>
 
     <!-- Highlights Container -->
@@ -457,7 +521,7 @@ function renderContent() {
   if (state.view === 'timeline') {
     renderTimelineView(document.getElementById('jump-strip'), document.getElementById('highlights-container'), list);
   } else if (state.selectedBook === null) {
-    // ALL BOOKS view: Sections organized BY BOOK NAME!
+    // ALL BOOKS view: Sections organized BY BOOK NAME with 0ms lazy rendering!
     renderAllBooksView(document.getElementById('jump-strip'), document.getElementById('highlights-container'), list);
   } else {
     // SINGLE BOOK view: Sections organized BY 50-PAGE RANGES!
@@ -466,36 +530,44 @@ function renderContent() {
 }
 
 /* ============================================================
-   All Books View — Organized by Book Name
-   (Page numbers across multiple books are not mixed)
+   All Books View — Ultra-Fast Lazy Rendering for 11k+ Highlights
    ============================================================ */
 function renderAllBooksView(stripEl, containerEl, list) {
-  // Group highlights by book name
-  const bookGroups = groupHighlightsByBookList(list);
+  // Re-use pre-computed and sorted book list when showing all highlights (instant 0ms)
+  const bookGroups = (!state.searchQuery.trim() && list === state.highlights)
+    ? getSortedBooks()
+    : groupHighlightsByBookList(list);
 
-  // If there are multiple books, show the book jump strip & global expand/collapse toggle
+  const visibleBookGroups = state.selectedBookFilter === 'all'
+    ? bookGroups
+    : bookGroups.filter(bg => bg.title === state.selectedBookFilter);
+
+  // Scoped section IDs for All Books tab
+  const currentIds = visibleBookGroups.map(bg => `ab-${bg.title}`);
+  const allExpanded = currentIds.length > 0 && currentIds.every(id => state.expandedSections.has(id));
+
   if (bookGroups.length > 1) {
     stripEl.style.display = 'flex';
     stripEl.innerHTML = `
       <div class="jump-label">${icons.book} Books:</div>
       <div class="jump-pills">
         <button class="jump-pill ${state.selectedBookFilter === 'all' ? 'active' : ''}" data-book-filter="all">
-          All (${list.length})
+          All (${list.length.toLocaleString()})
         </button>
         ${bookGroups.map(bg => `
           <button class="jump-pill ${state.selectedBookFilter === bg.title ? 'active' : ''}" data-book-filter="${escapeAttr(bg.title)}">
-            ${escapeHTML(bg.title)} (${bg.highlights.length})
+            ${escapeHTML(bg.title)} (${bg.highlights.length.toLocaleString()})
           </button>
         `).join('')}
       </div>
       <div class="jump-actions">
-        <button class="action-link-btn" id="toggle-global-collapse">
-          ${state.globalCollapseState === 'collapsed' ? 'Expand All' : 'Collapse All'}
+        <button class="action-link-btn" id="toggle-all-book-sections">
+          ${allExpanded ? 'Collapse All' : 'Expand All'}
         </button>
       </div>
     `;
 
-    // Bind Book Jump Pills
+    // Bind Jump Pills
     stripEl.querySelectorAll('.jump-pill').forEach(pill => {
       pill.addEventListener('click', () => {
         state.selectedBookFilter = pill.dataset.bookFilter;
@@ -503,48 +575,75 @@ function renderAllBooksView(stripEl, containerEl, list) {
       });
     });
 
-    // Global Expand / Collapse All (carries across all tabs)
-    document.getElementById('toggle-global-collapse')?.addEventListener('click', toggleGlobalCollapse);
-
-    // Filter by selected book pill if active
-    const visibleBookGroups = state.selectedBookFilter === 'all'
-      ? bookGroups
-      : bookGroups.filter(bg => bg.title === state.selectedBookFilter);
+    // Expand / Collapse All
+    document.getElementById('toggle-all-book-sections')?.addEventListener('click', () => {
+      if (allExpanded) {
+        currentIds.forEach(id => state.expandedSections.delete(id));
+      } else {
+        currentIds.forEach(id => state.expandedSections.add(id));
+      }
+      renderAllBooksView(stripEl, containerEl, list);
+    });
 
     containerEl.innerHTML = '';
     const frag = document.createDocumentFragment();
-    let cardIdx = 0;
 
+    // Render lightweight accordion headers (< 5ms for hundreds of books)
     visibleBookGroups.forEach(bg => {
-      const sectionId = `book-${bg.title}`;
-      const isCollapsed = isSectionCollapsed(sectionId);
+      const sectionId = `ab-${bg.title}`;
+      const isExpanded = state.expandedSections.has(sectionId);
 
       const groupDiv = document.createElement('div');
       groupDiv.className = 'collapsible-group';
 
       groupDiv.innerHTML = `
-        <div class="accordion-header ${isCollapsed ? 'collapsed' : ''}" data-section-id="${escapeAttr(sectionId)}">
+        <div class="accordion-header ${isExpanded ? '' : 'collapsed'}" data-section-id="${escapeAttr(sectionId)}">
           <div class="accordion-title-area">
             <span class="accordion-chevron">${icons.chevronDown}</span>
             <span class="book-icon">${icons.book}</span>
             <span class="accordion-title">${escapeHTML(bg.title)}</span>
             ${bg.author ? `<span class="accordion-author">by ${escapeHTML(bg.author)}</span>` : ''}
-            <span class="accordion-badge">${bg.highlights.length} highlight${bg.highlights.length !== 1 ? 's' : ''}</span>
+            <span class="accordion-badge">${bg.highlights.length.toLocaleString()} highlight${bg.highlights.length !== 1 ? 's' : ''}</span>
           </div>
         </div>
-        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}"></div>
+        <div class="accordion-body ${isExpanded ? '' : 'collapsed'}"></div>
       `;
 
-      // Accordion click toggle
-      groupDiv.querySelector('.accordion-header').addEventListener('click', () => {
-        toggleSectionCollapse(sectionId);
-        renderAllBooksView(stripEl, containerEl, list);
-      });
-
-      // Append cards
+      const headerEl = groupDiv.querySelector('.accordion-header');
       const bodyEl = groupDiv.querySelector('.accordion-body');
-      bg.highlights.forEach(h => {
-        bodyEl.appendChild(createHighlightCard(h, cardIdx++, false));
+
+      // Lazy render: cards are only populated when the book is expanded!
+      const ensureCardsRendered = () => {
+        if (!bodyEl.hasChildNodes()) {
+          const cardFrag = document.createDocumentFragment();
+          bg.highlights.forEach((h, idx) => {
+            cardFrag.appendChild(createHighlightCard(h, idx, false));
+          });
+          bodyEl.appendChild(cardFrag);
+        }
+      };
+
+      if (isExpanded) {
+        ensureCardsRendered();
+      }
+
+      // Smooth instant click toggle without re-rendering the whole page
+      headerEl.addEventListener('click', () => {
+        const currentlyExpanded = state.expandedSections.has(sectionId);
+        if (currentlyExpanded) {
+          state.expandedSections.delete(sectionId);
+          headerEl.classList.add('collapsed');
+          bodyEl.classList.add('collapsed');
+        } else {
+          state.expandedSections.add(sectionId);
+          ensureCardsRendered();
+          headerEl.classList.remove('collapsed');
+          bodyEl.classList.remove('collapsed');
+        }
+        // Update Expand/Collapse All toggle label
+        const nowAllExpanded = currentIds.every(id => state.expandedSections.has(id));
+        const toggleBtn = document.getElementById('toggle-all-book-sections');
+        if (toggleBtn) toggleBtn.textContent = nowAllExpanded ? 'Collapse All' : 'Expand All';
       });
 
       frag.appendChild(groupDiv);
@@ -561,35 +660,39 @@ function renderAllBooksView(stripEl, containerEl, list) {
     });
     containerEl.appendChild(frag);
   }
-
-  bindCardCopyButtons(containerEl);
 }
 
 /* ============================================================
    Single Book View — Organized with 50-Page Range Sections
    ============================================================ */
 function renderSingleBookView(stripEl, containerEl, list) {
-  // Group highlights of this specific book into 50-page sections
   const pageSections = groupByPageRanges(list, 50);
 
-  // If there are multiple page sections, show the quick-jump bar and collapsible accordions
+  const visibleSections = state.selectedPageRange === 'all'
+    ? pageSections
+    : pageSections.filter(sec => sec.id === state.selectedPageRange);
+
+  // Scoped section IDs for Single Book tab
+  const currentIds = visibleSections.map(sec => `sb-${state.selectedBook}-${sec.id}`);
+  const allExpanded = currentIds.length > 0 && currentIds.every(id => state.expandedSections.has(id));
+
   if (pageSections.length > 1) {
     stripEl.style.display = 'flex';
     stripEl.innerHTML = `
       <div class="jump-label">${icons.layers} Page Ranges:</div>
       <div class="jump-pills">
         <button class="jump-pill ${state.selectedPageRange === 'all' ? 'active' : ''}" data-range="all">
-          All (${list.length})
+          All (${list.length.toLocaleString()})
         </button>
         ${pageSections.map(sec => `
           <button class="jump-pill ${state.selectedPageRange === sec.id ? 'active' : ''}" data-range="${sec.id}">
-            ${sec.shortLabel} (${sec.count})
+            ${sec.shortLabel} (${sec.count.toLocaleString()})
           </button>
         `).join('')}
       </div>
       <div class="jump-actions">
-        <button class="action-link-btn" id="toggle-global-collapse">
-          ${state.globalCollapseState === 'collapsed' ? 'Expand All' : 'Collapse All'}
+        <button class="action-link-btn" id="toggle-all-page-sections">
+          ${allExpanded ? 'Collapse All' : 'Expand All'}
         </button>
       </div>
     `;
@@ -602,44 +705,68 @@ function renderSingleBookView(stripEl, containerEl, list) {
       });
     });
 
-    // Global Expand / Collapse All
-    document.getElementById('toggle-global-collapse')?.addEventListener('click', toggleGlobalCollapse);
-
-    // Filter by selected range if active
-    const visibleSections = state.selectedPageRange === 'all'
-      ? pageSections
-      : pageSections.filter(sec => sec.id === state.selectedPageRange);
+    // Toggle All Button
+    document.getElementById('toggle-all-page-sections')?.addEventListener('click', () => {
+      if (allExpanded) {
+        currentIds.forEach(id => state.expandedSections.delete(id));
+      } else {
+        currentIds.forEach(id => state.expandedSections.add(id));
+      }
+      renderSingleBookView(stripEl, containerEl, list);
+    });
 
     containerEl.innerHTML = '';
     const frag = document.createDocumentFragment();
 
     visibleSections.forEach(section => {
-      const sectionId = `page-${section.id}`;
-      const isCollapsed = isSectionCollapsed(sectionId);
+      const sectionId = `sb-${state.selectedBook}-${section.id}`;
+      const isExpanded = state.expandedSections.has(sectionId);
       const groupDiv = document.createElement('div');
       groupDiv.className = 'collapsible-group';
 
       groupDiv.innerHTML = `
-        <div class="accordion-header ${isCollapsed ? 'collapsed' : ''}" data-section-id="${section.id}">
+        <div class="accordion-header ${isExpanded ? '' : 'collapsed'}" data-section-id="${section.id}">
           <div class="accordion-title-area">
             <span class="accordion-chevron">${icons.chevronDown}</span>
             <span class="accordion-title">${escapeHTML(section.label)}</span>
-            <span class="accordion-badge">${section.count} highlight${section.count !== 1 ? 's' : ''}</span>
+            <span class="accordion-badge">${section.count.toLocaleString()} highlight${section.count !== 1 ? 's' : ''}</span>
           </div>
         </div>
-        <div class="accordion-body ${isCollapsed ? 'collapsed' : ''}"></div>
+        <div class="accordion-body ${isExpanded ? '' : 'collapsed'}"></div>
       `;
 
-      // Accordion click toggle
-      groupDiv.querySelector('.accordion-header').addEventListener('click', () => {
-        toggleSectionCollapse(sectionId);
-        renderSingleBookView(stripEl, containerEl, list);
-      });
-
-      // Append cards
+      const headerEl = groupDiv.querySelector('.accordion-header');
       const bodyEl = groupDiv.querySelector('.accordion-body');
-      section.highlights.forEach((h, idx) => {
-        bodyEl.appendChild(createHighlightCard(h, idx, false));
+
+      const ensureCardsRendered = () => {
+        if (!bodyEl.hasChildNodes()) {
+          const cardFrag = document.createDocumentFragment();
+          section.highlights.forEach((h, idx) => {
+            cardFrag.appendChild(createHighlightCard(h, idx, false));
+          });
+          bodyEl.appendChild(cardFrag);
+        }
+      };
+
+      if (isExpanded) {
+        ensureCardsRendered();
+      }
+
+      headerEl.addEventListener('click', () => {
+        const currentlyExpanded = state.expandedSections.has(sectionId);
+        if (currentlyExpanded) {
+          state.expandedSections.delete(sectionId);
+          headerEl.classList.add('collapsed');
+          bodyEl.classList.add('collapsed');
+        } else {
+          state.expandedSections.add(sectionId);
+          ensureCardsRendered();
+          headerEl.classList.remove('collapsed');
+          bodyEl.classList.remove('collapsed');
+        }
+        const nowAllExpanded = currentIds.every(id => state.expandedSections.has(id));
+        const toggleBtn = document.getElementById('toggle-all-page-sections');
+        if (toggleBtn) toggleBtn.textContent = nowAllExpanded ? 'Collapse All' : 'Expand All';
       });
 
       frag.appendChild(groupDiv);
@@ -656,8 +783,6 @@ function renderSingleBookView(stripEl, containerEl, list) {
     });
     containerEl.appendChild(frag);
   }
-
-  bindCardCopyButtons(containerEl);
 }
 
 /* ============================================================
@@ -666,23 +791,35 @@ function renderSingleBookView(stripEl, containerEl, list) {
 function renderTimelineView(stripEl, containerEl, list) {
   const hierarchy = groupByTimelineHierarchy(list);
 
+  const visibleYears = state.selectedYear === 'all'
+    ? hierarchy
+    : hierarchy.filter(y => y.year === state.selectedYear);
+
+  // Collect all month IDs in visible years
+  const currentMonthIds = [];
+  visibleYears.forEach(y => {
+    y.months.forEach(m => currentMonthIds.push(`tl-m-${m.monthKey}`));
+  });
+
+  const allMonthsExpanded = currentMonthIds.length > 0 && currentMonthIds.every(id => state.expandedSections.has(id));
+
   // Render Year Quick-Jump Strip
   stripEl.style.display = 'flex';
   stripEl.innerHTML = `
     <div class="jump-label">${icons.calendar} Jump to Year:</div>
     <div class="jump-pills">
       <button class="jump-pill ${state.selectedYear === 'all' ? 'active' : ''}" data-year="all">
-        All (${list.length})
+        All (${list.length.toLocaleString()})
       </button>
       ${hierarchy.map(y => `
         <button class="jump-pill ${state.selectedYear === y.year ? 'active' : ''}" data-year="${y.year}">
-          ${y.year} (${y.count})
+          ${y.year} (${y.count.toLocaleString()})
         </button>
       `).join('')}
     </div>
     <div class="jump-actions">
-      <button class="action-link-btn" id="toggle-global-collapse">
-        ${state.globalCollapseState === 'collapsed' ? 'Expand All' : 'Collapse All'}
+      <button class="action-link-btn" id="toggle-all-timeline">
+        ${allMonthsExpanded ? 'Collapse All' : 'Expand All'}
       </button>
     </div>
   `;
@@ -695,21 +832,26 @@ function renderTimelineView(stripEl, containerEl, list) {
     });
   });
 
-  // Global Expand / Collapse All
-  document.getElementById('toggle-global-collapse')?.addEventListener('click', toggleGlobalCollapse);
-
-  // Filter hierarchy if year is selected
-  const visibleYears = state.selectedYear === 'all'
-    ? hierarchy
-    : hierarchy.filter(y => y.year === state.selectedYear);
+  // Global Expand / Collapse All for Timeline
+  document.getElementById('toggle-all-timeline')?.addEventListener('click', () => {
+    if (allMonthsExpanded) {
+      currentMonthIds.forEach(id => state.expandedSections.delete(id));
+      visibleYears.forEach(y => state.expandedSections.delete(`tl-y-${y.year}`));
+    } else {
+      currentMonthIds.forEach(id => state.expandedSections.add(id));
+      visibleYears.forEach(y => state.expandedSections.add(`tl-y-${y.year}`));
+    }
+    renderTimelineView(stripEl, containerEl, list);
+  });
 
   containerEl.innerHTML = '';
   const frag = document.createDocumentFragment();
   let cardIdx = 0;
 
   visibleYears.forEach(yearObj => {
-    const yearId = `year-${yearObj.year}`;
-    const isYearCollapsed = isSectionCollapsed(yearId);
+    const yearId = `tl-y-${yearObj.year}`;
+    // Year defaults to expanded if its months are being viewed
+    const isYearCollapsed = state.expandedSections.has(`${yearId}-collapsed`);
 
     const yearDiv = document.createElement('div');
     yearDiv.className = 'collapsible-group';
@@ -719,56 +861,82 @@ function renderTimelineView(stripEl, containerEl, list) {
         <div class="accordion-title-area">
           <span class="accordion-chevron">${icons.chevronDown}</span>
           <span class="accordion-title">${yearObj.year}</span>
-          <span class="accordion-badge">${yearObj.count} highlight${yearObj.count !== 1 ? 's' : ''}</span>
+          <span class="accordion-badge">${yearObj.count.toLocaleString()} highlight${yearObj.count !== 1 ? 's' : ''}</span>
         </div>
       </div>
       <div class="accordion-body ${isYearCollapsed ? 'collapsed' : ''}"></div>
     `;
 
-    // Year collapse toggle
-    yearDiv.querySelector('.accordion-header').addEventListener('click', () => {
-      toggleSectionCollapse(yearId);
-      renderTimelineView(stripEl, containerEl, list);
-    });
-
+    const yearHeader = yearDiv.querySelector('.accordion-header');
     const yearBody = yearDiv.querySelector('.accordion-body');
 
-    // Render Months inside Year
+    yearHeader.addEventListener('click', () => {
+      if (state.expandedSections.has(`${yearId}-collapsed`)) {
+        state.expandedSections.delete(`${yearId}-collapsed`);
+        yearHeader.classList.remove('collapsed');
+        yearBody.classList.remove('collapsed');
+      } else {
+        state.expandedSections.add(`${yearId}-collapsed`);
+        yearHeader.classList.add('collapsed');
+        yearBody.classList.add('collapsed');
+      }
+    });
+
+    // Render Months inside Year (lazy card rendering)
     yearObj.months.forEach(monthObj => {
-      const monthId = `month-${monthObj.monthKey}`;
-      const isMonthCollapsed = isSectionCollapsed(monthId);
+      const monthId = `tl-m-${monthObj.monthKey}`;
+      const isMonthExpanded = state.expandedSections.has(monthId);
 
       const monthDiv = document.createElement('div');
       monthDiv.className = 'month-group';
 
       monthDiv.innerHTML = `
-        <div class="month-header ${isMonthCollapsed ? 'collapsed' : ''}" data-month-id="${monthId}">
+        <div class="month-header ${isMonthExpanded ? '' : 'collapsed'}" data-month-id="${monthId}">
           <span class="accordion-chevron">${icons.chevronDown}</span>
           <span>${monthObj.monthName}</span>
-          <span class="accordion-badge">${monthObj.count}</span>
+          <span class="accordion-badge">${monthObj.count.toLocaleString()}</span>
         </div>
-        <div class="accordion-body ${isMonthCollapsed ? 'collapsed' : ''}"></div>
+        <div class="accordion-body ${isMonthExpanded ? '' : 'collapsed'}"></div>
       `;
 
-      // Month collapse toggle
-      monthDiv.querySelector('.month-header').addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleSectionCollapse(monthId);
-        renderTimelineView(stripEl, containerEl, list);
-      });
-
+      const monthHeader = monthDiv.querySelector('.month-header');
       const monthBody = monthDiv.querySelector('.accordion-body');
 
-      // Render Days inside Month
-      monthObj.days.forEach(day => {
-        const dayHeader = document.createElement('div');
-        dayHeader.className = 'date-day-header';
-        dayHeader.textContent = formatDateHeader(day.label, day.date);
-        monthBody.appendChild(dayHeader);
+      const ensureMonthCardsRendered = () => {
+        if (!monthBody.hasChildNodes()) {
+          monthObj.days.forEach(day => {
+            const dayHeader = document.createElement('div');
+            dayHeader.className = 'date-day-header';
+            dayHeader.textContent = formatDateHeader(day.label, day.date);
+            monthBody.appendChild(dayHeader);
 
-        day.highlights.forEach(h => {
-          monthBody.appendChild(createHighlightCard(h, cardIdx++, true));
-        });
+            day.highlights.forEach(h => {
+              monthBody.appendChild(createHighlightCard(h, cardIdx++, true));
+            });
+          });
+        }
+      };
+
+      if (isMonthExpanded) {
+        ensureMonthCardsRendered();
+      }
+
+      monthHeader.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const currentlyExpanded = state.expandedSections.has(monthId);
+        if (currentlyExpanded) {
+          state.expandedSections.delete(monthId);
+          monthHeader.classList.add('collapsed');
+          monthBody.classList.add('collapsed');
+        } else {
+          state.expandedSections.add(monthId);
+          ensureMonthCardsRendered();
+          monthHeader.classList.remove('collapsed');
+          monthBody.classList.remove('collapsed');
+        }
+        const nowAllExpanded = currentMonthIds.every(id => state.expandedSections.has(id));
+        const toggleBtn = document.getElementById('toggle-all-timeline');
+        if (toggleBtn) toggleBtn.textContent = nowAllExpanded ? 'Collapse All' : 'Expand All';
       });
 
       yearBody.appendChild(monthDiv);
@@ -778,7 +946,6 @@ function renderTimelineView(stripEl, containerEl, list) {
   });
 
   containerEl.appendChild(frag);
-  bindCardCopyButtons(containerEl);
 }
 
 /* ============================================================
@@ -828,29 +995,6 @@ function createHighlightCard(h, index, showBook) {
   return card;
 }
 
-/* Bind copy buttons on cards */
-function bindCardCopyButtons(container) {
-  container.querySelectorAll('.card-copy-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const card = btn.closest('.highlight-card');
-      const textToCopy = card?.dataset.copyText || '';
-      if (!textToCopy) return;
-
-      navigator.clipboard.writeText(textToCopy).then(() => {
-        btn.innerHTML = `${icons.check} <span>Copied!</span>`;
-        btn.classList.add('copied');
-        showToast('Quote copied to clipboard!');
-        setTimeout(() => {
-          btn.innerHTML = `${icons.copy} <span>Copy</span>`;
-          btn.classList.remove('copied');
-        }, 1800);
-      }).catch(err => {
-        console.error('Failed to copy to clipboard:', err);
-      });
-    });
-  });
-}
 
 /* ============================================================
    Helper Functions

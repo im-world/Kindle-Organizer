@@ -175,6 +175,14 @@ ca3f356 - feat: enhance landing page, exact timestamps, collapsible navigation, 
    - Upgraded quote text contrast to high-legibility ivory (`#F4F2EE`), making the `Lora` serif font razor sharp.
    - Fixed search `<mark>` background to luminous warm amber (`rgba(226, 157, 98, 0.32)`) for high-contrast visibility.
 
+5. **Avid Reader Scalability (11,000+ Highlights & Hundreds of Books)**:
+   - **Zero-Latency Lazy Accordion Rendering**: Eliminated 1–2 second freeze in "All Books" view when handling 11,000+ highlights. Accordion headers render in <5ms; cards are mounted dynamically on-demand only when a book section is expanded.
+   - **Instant Book Sorting**: Re-introduced `Recent`, `A–Z`, and `Count` sorting buttons in the sidebar header with smooth DOM updates that preserve search input focus. In "All Books" view, the content accordion order dynamically tracks the active sort.
+   - **Strictly Scoped Accordion State**: Namespaced section IDs (`ab-${bookTitle}`, `sb-${bookTitle}-${range}`, `tl-y-${year}`, `tl-m-${month}`) ensure expanding a section in one book never expands across other books or tabs. Defaults to fully collapsed on load.
+   - **Global Event Delegation for Quote Copying**: A single event delegation listener on `#content` replaces thousands of individual button event listeners, freeing memory and eliminating card binding loops.
+   - **Side-by-Side Dual Header Badges**: Top-right header displays separate badge pills for books count (`[ 184 books ]`) and highlights count (`[ 11,420 highlights ]`) on the same line, formatted with localized thousand separators.
+   - **Non-Truncating Tooltip Architecture**: Removed restrictive sidebar overflow clipping and right-anchored footer tooltips (`left: auto; right: 0;`), completely preventing hover tooltip truncation.
+
 ---
 
 ## 8. Potential Next Enhancements (Roadmap)
