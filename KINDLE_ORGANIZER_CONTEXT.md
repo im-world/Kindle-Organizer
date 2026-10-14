@@ -127,6 +127,7 @@ Kindle-Organizer/
 ## 6. Git Commit History
 
 ```text
+e191447 - fix: minimalist landing page with newbie help tooltip, book sections in all books, and unified search bar with stable cursor
 ca3f356 - feat: enhance landing page, exact timestamps, collapsible navigation, and dark mode
 6459357 - docs: add screenshot, live demo link to README and fix sample fetch base path
 8998bbd - Fix: conditional base path for dev vs production
@@ -138,11 +139,25 @@ ca3f356 - feat: enhance landing page, exact timestamps, collapsible navigation, 
 
 ## 7. Recent Enhancements Completed (Session 2)
 
-1. **Natural & Editorial Landing Page**:
-   - Replaced generic AI dropzone box with an editorial hero layout featuring Lora serif typography.
-   - Dual-card workflow: dedicated tactile file drop studio with USB directory hint (`documents/My Clippings.txt`) and a first-class "Explore Demo Library" preview card with sample book tags.
-   - Trust and privacy strip: 100% client-side execution, instant search, and hierarchical reading index.
-   - Top navigation bar with theme switcher available immediately on the landing page.
+1. **Minimalist, Uncluttered Landing Page**:
+   - Clean, centered, warm, and spacious layout without nested boxes or marketing clutter.
+   - Action button explicitly labeled **"Upload Clippings.txt"**.
+   - Interactive help icon (`?`) next to the button that displays a clean step-by-step popover for newbies on hover:
+     1. Connect your Kindle to computer via USB
+     2. Open the `documents` folder on Kindle
+     3. Select `My Clippings.txt`
+   - Simple "or try with sample data" link and discrete theme toggle button.
+
+2. **Single Unified Search Bar with Stable Cursor**:
+   - Single clean search bar in the sidebar matching across quotes, book titles, and authors simultaneously.
+   - Fixed cursor focus loss bug by isolating search input from DOM replacement during typing.
+   - Removed duplicate header search bar for a simpler, distraction-free UI.
+
+3. **Intelligent Hierarchical Sectioning**:
+   - **All Books Tab**: Highlights are grouped by **Book Name** into collapsible sections (page numbers across different books are not mixed). Includes book jump pills and "Expand / Collapse All".
+   - **Single Book View**: When a specific book is chosen, 50-page range collapsible sections (`Pages 1–50`, `Pages 51–100`...) activate.
+   - **Timeline View**: Collapsible Years and Months with exact `hh:mm:ss` timestamps.
+
 
 2. **Exact Timestamps (`hh:mm:ss`)**:
    - Extracted exact 12-hour/24-hour timestamps down to the second (e.g. `10:23:45 PM`).
