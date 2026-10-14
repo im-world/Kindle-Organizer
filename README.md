@@ -8,12 +8,16 @@ A clean, minimalist desktop web app to browse and search your Kindle highlights.
 
 ## Features
 
-- **Import** your `My Clippings.txt` file via drag-and-drop or file picker
-- **Browse by Book** — sidebar groups highlights by book title
-- **Timeline View** — see highlights ordered by date
-- **Search** — instant full-text search across all highlights
-- **Dark Mode** — toggle between light and dark themes
-- **Fast** — no frameworks, no dependencies, just vanilla JS
+- **Import** your `My Clippings.txt` file via drag-and-drop or file picker, or explore the instant demo library
+- **Browse by Book** — sidebar with real-time book filtering and sorting (Recently Read, Alphabetical, Highlight Count)
+- **50-Page Range Reader** — collapsible 50-page sections with quick-jump pills for navigating books with dozens of highlights
+- **Hierarchical Timeline View** — collapsible years and months with quick year jump buttons
+- **Exact Timestamps** — displays exact `hh:mm:ss` clipping timestamps alongside page and location markers
+- **Instant Search** — real-time full-text search across quotes, book titles, and authors with live text highlighting
+- **One-Click Citation Copy** — hover over any highlight to copy the quote with formatted title, author, and page citation
+- **Refined Theming** — warm editorial cream light mode and high-contrast Obsidian/warm charcoal dark mode
+- **Ultra Fast & Private** — 100% client-side, zero dependencies, zero data sent to any server
+
 
 ## Getting Started
 

@@ -67,6 +67,9 @@ function parseBlock(block, index) {
   if (!text && meta.type === 'Bookmark') return null;
   if (!text) return null;
 
+  const pageNum = meta.page ? parseInt(meta.page, 10) : null;
+  const locNum = meta.location ? parseInt(meta.location.split('-')[0], 10) : null;
+
   return {
     id: `h-${index}`,
     bookTitle: title,
@@ -74,9 +77,12 @@ function parseBlock(block, index) {
     text,
     type: meta.type,
     page: meta.page,
+    pageNum: isNaN(pageNum) ? null : pageNum,
     location: meta.location,
+    locNum: isNaN(locNum) ? null : locNum,
     date: meta.date,
     dateStr: meta.dateStr,
+    timeStr: meta.timeStr || (meta.date ? formatTimeFromDate(meta.date) : ''),
   };
 }
 
@@ -97,10 +103,10 @@ function parseTitleAuthor(line) {
 }
 
 /**
- * Extracts type, page, location, and date from the metadata line.
+ * Extracts type, page, location, date, and exact hh:mm:ss timestamp from metadata.
  */
 function parseMeta(line) {
-  const result = { type: 'Highlight', page: '', location: '', date: null, dateStr: '' };
+  const result = { type: 'Highlight', page: '', location: '', date: null, dateStr: '', timeStr: '' };
 
   // Type
   if (/Your Note/i.test(line))       result.type = 'Note';
@@ -121,6 +127,12 @@ function parseMeta(line) {
     const parsed = new Date(result.dateStr);
     if (!isNaN(parsed.getTime())) {
       result.date = parsed;
+      result.timeStr = formatTimeFromDate(parsed);
+    } else {
+      // Fallback regex to capture hh:mm:ss or hh:mm for localized dates
+      const timeMatch = result.dateStr.match(/(\d{1,2}:\d{2}:\d{2}(?:\s*[AP]M)?)/i) ||
+                        result.dateStr.match(/(\d{1,2}:\d{2}(?:\s*[AP]M)?)/i);
+      if (timeMatch) result.timeStr = timeMatch[1];
     }
   }
 
@@ -128,9 +140,22 @@ function parseMeta(line) {
 }
 
 /**
+ * Formats a Date object to hh:mm:ss format (12-hour with seconds and AM/PM).
+ */
+export function formatTimeFromDate(date) {
+  if (!date || isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
+}
+
+/**
  * Group highlights by book title.
  * @param {Highlight[]} highlights
- * @returns {Map<string, {title: string, author: string, highlights: Highlight[]}>}
+ * @returns {Map<string, {title: string, author: string, highlights: Highlight[], latestDate: Date|null, totalCount: number}>}
  */
 export function groupByBook(highlights) {
   const map = new Map();
@@ -138,22 +163,164 @@ export function groupByBook(highlights) {
   for (const h of highlights) {
     const key = h.bookTitle;
     if (!map.has(key)) {
-      map.set(key, { title: h.bookTitle, author: h.author, highlights: [] });
+      map.set(key, { title: h.bookTitle, author: h.author, highlights: [], latestDate: null, totalCount: 0 });
     }
-    map.get(key).highlights.push(h);
+    const bookObj = map.get(key);
+    bookObj.highlights.push(h);
+    if (h.date && (!bookObj.latestDate || h.date > bookObj.latestDate)) {
+      bookObj.latestDate = h.date;
+    }
   }
 
-  // Sort books alphabetically
+  for (const book of map.values()) {
+    book.totalCount = book.highlights.length;
+  }
+
+  // Default alphabetical sort
   return new Map([...map.entries()].sort((a, b) => a[0].localeCompare(b[0])));
 }
 
 /**
- * Group highlights by date (day).
+ * Hierarchical grouping by Year -> Month -> Day for avid readers with years of reading history.
+ * @param {Highlight[]} highlights
+ * @returns {{year: string, count: number, months: {monthKey: string, monthName: string, count: number, days: {dayKey: string, label: string, date: Date|null, highlights: Highlight[]}[]}[]}[]}
+ */
+export function groupByTimelineHierarchy(highlights) {
+  // Sort newest first
+  const sorted = [...highlights].sort((a, b) => {
+    if (!a.date && !b.date) return 0;
+    if (!a.date) return 1;
+    if (!b.date) return -1;
+    return b.date - a.date;
+  });
+
+  const yearMap = new Map();
+
+  for (const h of sorted) {
+    const date = h.date;
+    const yearKey = date ? String(date.getFullYear()) : 'Undated';
+    const monthKey = date
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      : 'undated';
+    const monthName = date
+      ? date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+      : 'Undated';
+    const dayKey = date ? date.toDateString() : 'undated-day';
+
+    if (!yearMap.has(yearKey)) {
+      yearMap.set(yearKey, { year: yearKey, count: 0, monthsMap: new Map() });
+    }
+    const yearObj = yearMap.get(yearKey);
+    yearObj.count++;
+
+    if (!yearObj.monthsMap.has(monthKey)) {
+      yearObj.monthsMap.set(monthKey, {
+        monthKey,
+        monthName,
+        count: 0,
+        daysMap: new Map(),
+      });
+    }
+    const monthObj = yearObj.monthsMap.get(monthKey);
+    monthObj.count++;
+
+    if (!monthObj.daysMap.has(dayKey)) {
+      monthObj.daysMap.set(dayKey, {
+        dayKey,
+        label: dayKey,
+        date: date || null,
+        highlights: [],
+      });
+    }
+    monthObj.daysMap.get(dayKey).highlights.push(h);
+  }
+
+  const result = [];
+  for (const yearObj of yearMap.values()) {
+    const months = [];
+    for (const monthObj of yearObj.monthsMap.values()) {
+      months.push({
+        monthKey: monthObj.monthKey,
+        monthName: monthObj.monthName,
+        count: monthObj.count,
+        days: [...monthObj.daysMap.values()],
+      });
+    }
+    result.push({
+      year: yearObj.year,
+      count: yearObj.count,
+      months,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Group highlights within a book by 50-page ranges.
+ * For avid readers with 50-100+ highlights in a single book.
+ * @param {Highlight[]} highlights
+ * @param {number} pageSize (default 50)
+ */
+export function groupByPageRanges(highlights, pageSize = 50) {
+  // Sort highlights by page number, then location, then date
+  const sorted = [...highlights].sort((a, b) => {
+    if (a.pageNum !== null && b.pageNum !== null) return a.pageNum - b.pageNum;
+    if (a.pageNum !== null) return -1;
+    if (b.pageNum !== null) return 1;
+    if (a.locNum !== null && b.locNum !== null) return a.locNum - b.locNum;
+    if (a.date && b.date) return a.date - b.date;
+    return 0;
+  });
+
+  const pagedHighlights = sorted.filter(h => h.pageNum !== null);
+  const unpagedHighlights = sorted.filter(h => h.pageNum === null);
+
+  const sections = [];
+
+  if (pagedHighlights.length > 0) {
+    const maxPage = Math.max(...pagedHighlights.map(h => h.pageNum));
+    const totalBuckets = Math.ceil(maxPage / pageSize);
+
+    for (let i = 0; i < totalBuckets; i++) {
+      const start = i * pageSize + 1;
+      const end = (i + 1) * pageSize;
+      const inRange = pagedHighlights.filter(h => h.pageNum >= start && h.pageNum <= end);
+      if (inRange.length > 0) {
+        sections.push({
+          id: `range-${start}-${end}`,
+          label: `Pages ${start}–${end}`,
+          shortLabel: `pp. ${start}–${end}`,
+          startPage: start,
+          endPage: end,
+          count: inRange.length,
+          highlights: inRange,
+        });
+      }
+    }
+  }
+
+  if (unpagedHighlights.length > 0) {
+    sections.push({
+      id: 'range-unpaged',
+      label: pagedHighlights.length > 0 ? 'Other Locations' : 'All Highlights',
+      shortLabel: pagedHighlights.length > 0 ? 'Locations' : 'Highlights',
+      startPage: null,
+      endPage: null,
+      count: unpagedHighlights.length,
+      highlights: unpagedHighlights,
+    });
+  }
+
+  return sections;
+}
+
+/**
+ * Flat date grouping (backwards compatible).
  * @param {Highlight[]} highlights
  * @returns {{label: string, date: Date|null, highlights: Highlight[]}[]}
  */
 export function groupByDate(highlights) {
-  // Sort newest first
   const sorted = [...highlights].sort((a, b) => {
     if (!a.date && !b.date) return 0;
     if (!a.date) return 1;
@@ -191,3 +358,4 @@ export function searchHighlights(highlights, query) {
     h.author.toLowerCase().includes(q)
   );
 }
+
